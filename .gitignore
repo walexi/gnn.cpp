@@ -1,0 +1,9 @@
+*.out
+*.notes
+file.txt
+ooo
+unused
+bin
+.obj
+.vscode
+tests/doctest.h
