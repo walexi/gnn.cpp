@@ -7,9 +7,6 @@
 using namespace std;
 using namespace cyg;
 
-// check for memory leak too, possibly some dangling references
-// any pointer pointing to your head ..lol, check that too
-
 const size_t n_elements = 2;
 const vector<int> dims = {1,2};
 const vector<float> dat(n_elements,1);
@@ -36,6 +33,8 @@ TEST_CASE("testing cyg::ones") {
     cout<<"check indexing operator"<<"\n";
     CHECK(t_ones(0,0)!=2);
     CHECK(t_ones(0,0)==1);
+    CHECK_THROWS(t_ones(0,14));
+    CHECK_THROWS(t_ones(12,0));
 }
 TEST_CASE("testing binary ops - add"){
     auto add_ = t_vec + t_vec2;
