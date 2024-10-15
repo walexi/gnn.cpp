@@ -119,9 +119,6 @@ void cyg::tensor::zero_grad() {
 /**
  * tensor with require_grad=true are used in building a computational graph
  * for reverse mode
- * when we call backward, we have the current node of the tensor to be the last op
- * using the node, do a topological sort on the graph,
- * using the sorted nodes, simply run a loop, passing in the upstream grad down the line
  */
 void cyg::tensor::backward(std::vector<float *> grad, std::vector<float *> z)
 {
@@ -142,14 +139,13 @@ cyg::tensor::tensor(std::vector<float> &ms, const std::vector<int> &dims, Device
         this->grad = v;
         // this->grad = make_unique<vector<float*>>(v);
     };
-    // assert valid dims, and check against the num of elements in ms
-}; // size_t cannot be -ve, so no need assert sanity check
+};
 // cyg::tensor::~tensor() noexcept
 // {
 //     // TODO: insert return statement here
 //     throw logic_error{"not yet implemented"};
 // };
-// move constructor
+// move constructors
 // cyg::tensor::tensor(tensor &&other)
 // {
 //     throw logic_error{"not yet implemented"};
