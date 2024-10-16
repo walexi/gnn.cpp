@@ -11,19 +11,8 @@
  */
 namespace cyg
 {
-    /**
-     * only backward to bind to lambda expressions, base class
-     * each ops is a node in a graph
-     * it has the children, of type vector<ops>
-     * it has parent, the prev ops
-     *  class vs struct
-     */
-    // struct ops
-    // {
-    //     ops *parent;
-    //     std::vector<ops *> children;
+
     //     std::vector<float> (*func)(std::vector<float>, std::vector<float>);
-    // };
 
     enum class Device : short
     {
@@ -34,15 +23,15 @@ namespace cyg
     class tensor
     {
     private:
-        std::vector<float> d; // set default values for default initialization - constructor
+        std::vector<float> d;
         const std::vector<int> dims;
-        // undecided about design choice until cuda comes in, prefer pointer since it can be null for tensor with reuire grad false
-        //also consider static if needed or alt cos of graph
-        std::vector<float> *grad; 
+        // also consider static if needed or alt cos of graph
+        std::vector<float> *grad;
         size_t n_dims;
         Device device;
         bool requires_grad;
-        // ops *current_node; // use to track computational graph, if null initiate to the head/root
+        tensor _backward();
+
     public:
         explicit tensor(std::vector<float> &ms, const std::vector<int> &dims, Device device = Device::cpu, bool requires_grad = false);
         // ~tensor() noexcept; // destructor must not fail - so noexcept
@@ -59,11 +48,14 @@ namespace cyg
         const Device get_device() const { return this->device; }
         void detach();
         void enable_grad(bool requires_grad);
+        // void update_grad(vector<float>* g);
+        void transpose(int dim1=0, int dim2=0);
         void zero_grad();
-        static void backward(std::vector<float *> grad, std::vector<float *> z);
-        const float &operator()(int dims,...); 
+        std::vector<float>* get_grad() {return this->grad;};
+        void backward(std::vector<float *> grad);
+        const float &operator()(int dims, ...);
         // y = ab dy/db = 1 dy/da = 1
-        tensor &add(tensor &other);//not using const for other since i will be update the comp graph of both operands
+        tensor &add(tensor &other); // not using const for other since i will be update the comp graph of both operands
         tensor &operator+=(tensor &rhs) { return this->add(rhs); };
         friend tensor operator+(tensor lhs, tensor &rhs)
         {

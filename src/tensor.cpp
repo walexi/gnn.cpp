@@ -12,34 +12,24 @@ using namespace std;
 default_random_engine e(time(nullptr));
 uniform_real_distribution<float> u(0, 1);
 
-auto get_index(const tensor *t, std::vector<int> &dims)
-{
-    // dims = {1,2,3} n_elements=1*2*3=6 last_index in the flatten vec is {0,1,2} = 0*2 + 1*3=5
+auto get_index(const tensor *t, vector<int> dims)
+{   //                                                           t_dims = {1,5,7}
+    // dims = {1,5,7} n_elements=1*5*7=35 last_index in the flatten vec is {0,4,6} = 0*5 + 4*7 + 6=12
+    //                                                             dims = {0,0,1} = 0*2 + 0*3 + 1 = 1
     transform(dims.cbegin(), dims.cend(), next(t->shape().cbegin()), dims.begin(), multiplies<int>()); // zip(dims[1:], this->dims[:-1]) zip(dims[1:]+[0], this->dims[:])
-    auto index = accumulate(dims.cbegin(), dims.cend(), 0);                                            // sum transformation
+    auto index = accumulate(dims.cbegin(), dims.cend(), dims[-1]);                                            // sum transformation
     return index;
 };
 
-const float &tensor::operator()(int dim, ...)
+const float &tensor::operator()(int d, ...)
 {
-    vector<int> dims = {dim};
+    vector<int> dims = {d};
     va_list args;
-    va_start(args, dim);
-    for (int i = 0; i < this->rank() - 1; ++i) // will chop if user enter more than tensor's rank
-    {
-        int idx = va_arg(args, int);
-        dims.push_back(idx);
-    }
+    va_start(args, d);
+    for (int i = 0; i < this->rank() - 1; ++i) dims.push_back(va_arg(args, int)); // will chop if user enter more than tensor's rank
     va_end(args);
-    int i = 0;
-    for (auto j : dims)
-    {
-        if (j >= this->shape()[i] || j < 0)
-            throw runtime_error("invalid index");
-        i++;
-    }
+    for(int i=0; i<this->rank();++i) if(dims[i]>= this->shape()[i] || dims[i]<0) throw runtime_error("invalid index");
     auto index = get_index(this, dims);
-    cout << index << endl;
     return this->d[index];
 };
 
@@ -103,8 +93,7 @@ void cyg::tensor::enable_grad(bool requires_grad)
     if (requires_grad)
     {
         this->requires_grad = true;
-        vector<float> *v = new vector<float>{0};
-        this->grad = v;
+        this->zero_grad();
     }
     else
     {
@@ -112,15 +101,14 @@ void cyg::tensor::enable_grad(bool requires_grad)
         this->grad = nullptr;
     };
 }
-void cyg::tensor::zero_grad() {
-    // fill(this->grad.begin(), this->grad.end(), 0.0);
+void cyg::tensor::zero_grad()
+{
+    vector<float> *v = new vector<float>(this->n_elements(), 0);
+    this->grad = v;
 };
-
 /**
- * tensor with require_grad=true are used in building a computational graph
- * for reverse mode
  */
-void cyg::tensor::backward(std::vector<float *> grad, std::vector<float *> z)
+void cyg::tensor::backward(std::vector<float *> grad)
 {
     // TODO: insert return statement here
     throw logic_error{"not yet implemented"};
