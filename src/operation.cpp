@@ -6,13 +6,8 @@ using namespace std;
 using namespace cyg;
 /**
  * 
- * std::valarray would have been helpful since its is very suited for vectorized operations on arrays of numbers
- * but i chose to stick with vectors
- * i tried valarray but realized it decays to pointers like array when passed as arguments to a function
- * i've been trying to avoid, the more reason why i didnt use arrays since i have to use template (template specialization)
- * which eventually increase the amount of code i have to write
- * 
- * may still consider using valarray but for now i'm sticking with vector for simplicity
+ * std::valarray would have been helpful since it is very suited for vectorized operations on arrays of numbers
+ * but i choose to stick with vectors for simplicity & mem mngmt
  */
 /**
  * lambda functions to handle basic operations for two scalars
@@ -29,8 +24,8 @@ const auto op_pow = [](float a, float b)
 { return std::pow(a, b); };
 
 /**
- * operator overloading for vector, can easily delegate the underlying operations to cuda if cuda is available
- * for speed up
+ * operator overloading for vector, can easily delegate the underlying operations to cuda for speed up if cuda is available
+ * 
  */
 
 std::vector<float> cyg::pow(const std::vector<float> &v1, const std::vector<float> v2)
