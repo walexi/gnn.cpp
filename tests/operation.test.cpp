@@ -81,9 +81,9 @@ TEST_CASE("testing Div")
     CHECK(equal(res->data()->cbegin(), res->data()->cend(), res_vec.begin()));
     auto incoming_gradients = initialize(dims, 2);
     div->backward(incoming_gradients);
-    auto numerator_grad = *incoming_gradients * ( 1/ *denominator->data() ); //y=a*b, dy/da = b = 1 * b
+    auto numerator_grad = *incoming_gradients * cyg::pow(*denominator->data(),-1); //y=a*b, dy/da = b = 1 * b
     CHECK(equal(numerator_grad.cbegin(), numerator_grad.cend(), numerator->get_grad()->cbegin()));
-    auto denominator_grad = *incoming_gradients * ( *numerator->data() * cyg::pow(*denominator->data(), 2) ); //dy/db = a*b**-2
+    auto denominator_grad = *incoming_gradients * *numerator->data() * cyg::pow(*denominator->data(), 2); //dy/db = a*b**-2
     CHECK(equal(denominator_grad.cbegin(), denominator_grad.cend(), denominator->get_grad()->cbegin()));
     div.reset();
     numerator.reset();

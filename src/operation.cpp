@@ -32,17 +32,17 @@ const auto op_pow = [](float a, float b)
  * operator overloading for vector, can easily delegate the underlying operations to cuda if cuda is available
  * for speed up
  */
-std::vector<float> cyg::pow(const std::vector<float> &v1, const float v2)
-{
-    auto v2_vec = new vector<float>(v1.size(), v2);
-    return cyg::pow(v1, *v2_vec);
-}
 
 std::vector<float> cyg::pow(const std::vector<float> &v1, const std::vector<float> v2)
 {
     auto out_data = new vector<float>(v1.size(), 0);
     op_cpu(*out_data, v1, v2, op_pow);
     return *out_data;
+}
+std::vector<float> cyg::pow(const std::vector<float> &v1, const float v2)
+{
+    auto v2_vec = new vector<float>(v1.size(), v2);
+    return cyg::pow(v1, *v2_vec);
 }
 
 std::vector<float> cyg::operator+(const std::vector<float>& v1, const std::vector<float>& v2)
@@ -90,11 +90,6 @@ std::vector<float> cyg::operator/(const std::vector<float> &v1, const float v2)
     return v1 / *v2_vec;
 }
 
-std::vector<float> cyg::operator/(const float v1, const std::vector<float> &v2)
-{
-    auto v1_vec = new vector<float>(v2.size(), v1);
-    return *v1_vec / v2;
-}
 /**
  * @brief Save input tensors[shared pointers] that can be retrieved later.
  * the tensors can be retrieved by calling the get_saved_variables() method
@@ -181,7 +176,7 @@ void cyg::Add::backward(std::vector<float>* incoming_grad)
     string err_msg = "can backprop without a executing a forward computation first";
     assertm(var.size()!=0, err_msg) //prolly not needed though since the lines below wont execute, just for sanity check
     if(var.size()==0) throw runtime_error(err_msg);
-    for (auto t : var) if (t->require_grad()) t->update_grad(incoming_grad);
+    for (auto t : var) if (t->require_grad()) t->backward(incoming_grad);
 }
 std::shared_ptr<tensor> cyg::Mul::forward(std::shared_ptr<tensor> lhs, std::shared_ptr<tensor> rhs)
 {
@@ -207,12 +202,12 @@ void cyg::Mul::backward(std::vector<float>* incoming_grad)
     auto rhs = var[1];
     if(rhs->require_grad()){
         auto grad = *incoming_grad * *lhs->data(); //y=a*b, dy/da = b = 1 * b
-        rhs->update_grad(&grad);
+        rhs->backward(&grad);
 
     }
     if(lhs->require_grad()){
         auto grad = *incoming_grad * *rhs->data();
-        lhs->update_grad(&grad);
+        lhs->backward(&grad);
     }
 }
 
@@ -223,7 +218,7 @@ std::shared_ptr<tensor> cyg::Div::forward(std::shared_ptr<tensor> numerator, std
     auto req_grad = numerator->require_grad() || denominator->require_grad();
     vector<float>* out_data;
     if (numerator->get_device() == Device::cpu)
-        *out_data = *numerator->data() / *denominator->data();
+        *out_data = *numerator->data() * *denominator->data();
     // op_cpu(out_data, lhs.data(), rhs.data(), op);
     auto out = make_shared<tensor>(*out_data, numerator->shape(), numerator->get_device(), req_grad);
     numerator->add_child(out.get());
@@ -241,11 +236,11 @@ void cyg::Div::backward(std::vector<float>* incoming_grad)
     auto denominator = var[1];
     // y= a/b y = a * b**-1   dy/da = b**-1=1/b  dy/db = a*b**-2
     if(numerator->require_grad()){
-        auto local_grad = *incoming_grad * ( 1 / *denominator->data()); //y=a*b, dy/da = b = 1 * b
-        numerator->update_grad(&local_grad);
+        auto local_grad = *incoming_grad * cyg::pow(*denominator->data(), -1); //y=a*b, dy/da = b = 1 * b
+        numerator->backward(&local_grad);
     }
     if(denominator->require_grad()){ //dy/db = a*b**-2
-        auto local_grad = *incoming_grad * (*numerator->data() * pow(*denominator->data(), 2));
-        denominator->update_grad(&local_grad);
+        auto local_grad = *incoming_grad * (*numerator->data() * cyg::pow(*denominator->data(), 2));
+        denominator->backward(&local_grad);
     }
 }

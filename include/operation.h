@@ -23,7 +23,6 @@ namespace cyg
     std::vector<float> operator*(const std::vector<float>& v1, const float v2);
     std::vector<float> operator/(const std::vector<float>& v1, const std::vector<float>& v2);
     std::vector<float> operator/(const std::vector<float>& v1, const float v2);
-    std::vector<float> operator/(const float v1, const std::vector<float>& v2);
 
     class Context
     {
