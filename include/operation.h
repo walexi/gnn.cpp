@@ -70,14 +70,5 @@ namespace cyg
             std::shared_ptr<tensor> forward(std::shared_ptr<tensor> numerator, std::shared_ptr<tensor> denominator) override;
             void backward(std::vector<float>* incoming_grad) override;
     };
-
-    struct node
-    {
-        Operation* op;
-        std::vector<tensor*> prev;
-        tensor* output_tensor;
-        tensor* next;
-        std::vector<float>* local_grad;
-    };
 }
 #endif
