@@ -5,24 +5,6 @@
 #include <memory>
 namespace cyg
 {
-    // template<typename T>
-    /**
-     * @todo 
-     * use template specialization to reduce code here especially for math operator overloading
-     */
-    template <typename T>
-     void op_cpu(std::vector<float>& out, const std::vector<float>& lhs, const std::vector<float>& rhs, T t);
-
-    std::vector<float> pow(const std::vector<float>& v1, const float v2);
-    std::vector<float> pow(const std::vector<float>& v1, const std::vector<float> v2);
-    std::vector<float> operator+(const std::vector<float>& v1, const std::vector<float>& v2);
-    std::vector<float> operator+(const std::vector<float>& v1, const float v2);
-    std::vector<float> operator-(const std::vector<float>& v1, const std::vector<float>& v2);
-    std::vector<float> operator-(const std::vector<float>& v1, const float v2);
-    std::vector<float> operator*(const std::vector<float>& v1, const std::vector<float>& v2);
-    std::vector<float> operator*(const std::vector<float>& v1, const float v2);
-    std::vector<float> operator/(const std::vector<float>& v1, const std::vector<float>& v2);
-    std::vector<float> operator/(const std::vector<float>& v1, const float v2);
 
     class Context
     {
@@ -42,8 +24,8 @@ namespace cyg
             Operation(){
                 this->context = std::make_unique<Context>();
             };
-            virtual std::shared_ptr<tensor> forward(std::shared_ptr<tensor> lhs, std::shared_ptr<tensor> rhs);
-            virtual std::shared_ptr<tensor> forward(std::shared_ptr<tensor> t);
+            virtual std::shared_ptr<tensor> forward(const std::shared_ptr<tensor>& lhs, const std::shared_ptr<tensor>& rhs);
+            virtual std::shared_ptr<tensor> forward(const std::shared_ptr<tensor>& t);
             virtual void backward(std::vector<float>* incoming_grad);
     };
 
@@ -51,7 +33,7 @@ namespace cyg
     class Add : public Operation{
         public:
             Add(): Operation(){}
-            std::shared_ptr<tensor> forward(std::shared_ptr<tensor> lhs, std::shared_ptr<tensor> rhs) override;
+            std::shared_ptr<tensor> forward(const std::shared_ptr<tensor>& lhs,const std::shared_ptr<tensor>& rhs) override;
             void backward(std::vector<float>* incoming_grad) override;
     };
     
@@ -59,15 +41,21 @@ namespace cyg
     class Mul : public Operation{
         public:
             Mul(): Operation(){}
-            std::shared_ptr<tensor> forward(std::shared_ptr<tensor> lhs, std::shared_ptr<tensor> rhs) override;
+            std::shared_ptr<tensor> forward(const std::shared_ptr<tensor>& lhs, const std::shared_ptr<tensor>& rhs) override;
             void backward(std::vector<float>* incoming_grad) override;
     };
     // // template<typename T>
     class Div : public Operation{
         public:
             Div(): Operation(){}
-            std::shared_ptr<tensor> forward(std::shared_ptr<tensor> numerator, std::shared_ptr<tensor> denominator) override;
+            std::shared_ptr<tensor> forward(const std::shared_ptr<tensor>& numerator, const std::shared_ptr<tensor>& denominator) override;
             void backward(std::vector<float>* incoming_grad) override;
+    };
+
+    struct node
+    {
+        Operation* op;
+        tensor* output_tensor;
     };
 }
 #endif
