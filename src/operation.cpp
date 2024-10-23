@@ -39,15 +39,13 @@ std::shared_ptr<tensor> cyg::Operation::forward(const shared_ptr<tensor>& lhs, c
     return std::shared_ptr<tensor>();
 }
 
-std::shared_ptr<tensor> cyg::Operation::forward(const shared_ptr<tensor>& t) { return std::shared_ptr<tensor>(); }
-
 void cyg::Operation::backward(std::vector<float>* incoming_grad) {}
 
 
 /**
  * forward and backward passes for basic operations such as Add, etc
  * inherits class Operation
- * it makes use of the context class for caching input and output tensors
+ * it makes use of the context class for caching input tensors for backward computation
  * see the Context class for more information.
  */
 // template<typename T>
@@ -56,13 +54,11 @@ std::shared_ptr<tensor> cyg::Add::forward(const std::shared_ptr<tensor>& lhs, co
     assertm(lhs->get_device() == rhs->get_device(), "tensors are on different devices");
     if(lhs->get_device()!=rhs->get_device()) throw runtime_error("tensors are on different devices");
     auto req_grad = lhs->require_grad() || rhs->require_grad();
-    vector<float>* out_data;
-    if (lhs->get_device() == Device::cpu)
-        *out_data = *lhs->data() + *rhs->data();
-    // op_cpu(*out_data, *lhs->data(), *rhs->data(), op_add);
+    auto out_data = new vector<float>();// allocating object on the heap,dont forget
+    *out_data = *lhs->data() + *rhs->data();
     auto out = make_shared<tensor>(*out_data, lhs->shape(), lhs->get_device(), req_grad);
-    out->add_child(lhs.get());
-    out->add_child(rhs.get());
+    out->add_child(lhs);
+    out->add_child(rhs);
     this->context->save_for_backward({lhs, rhs});
 
     return out;
@@ -74,19 +70,18 @@ void cyg::Add::backward(std::vector<float>* incoming_grad)
     assertm(var.size()!=0, err_msg) //prolly not needed though since the lines below wont execute, just for sanity check
     if(var.size()==0) throw runtime_error(err_msg);
     for (auto t : var) if (t->require_grad()) t->update_grad(incoming_grad);
+    this->context.reset();
 }
 std::shared_ptr<tensor> cyg::Mul::forward(const std::shared_ptr<tensor>& lhs, const std::shared_ptr<tensor>& rhs)
 {
     assert(lhs->get_device() == rhs->get_device() && "tensors are on different devices");
     if(lhs->get_device()!=rhs->get_device()) throw runtime_error("tensors are on different devices");
     auto req_grad = lhs->require_grad() || rhs->require_grad();
-    vector<float>* out_data;
-    if (lhs->get_device() == Device::cpu)
-        *out_data = *lhs->data() * *rhs->data();
-    // op_cpu(out_data, lhs.data(), rhs.data(), op);
+    auto out_data = new vector<float>();
+    *out_data = *lhs->data() * *rhs->data();
     auto out = make_shared<tensor>(*out_data, lhs->shape(), lhs->get_device(), req_grad);
-    out->add_child(lhs.get());
-    out->add_child(rhs.get());
+    out->add_child(lhs);
+    out->add_child(rhs);
     this->context->save_for_backward({lhs, rhs});
     return out;
 }
@@ -113,13 +108,11 @@ std::shared_ptr<tensor> cyg::Div::forward(const std::shared_ptr<tensor>& numerat
     assert(numerator->get_device() == denominator->get_device() && "tensors are on different devices");
     if(numerator->get_device()!=denominator->get_device()) throw runtime_error("tensors are on different devices");
     auto req_grad = numerator->require_grad() || denominator->require_grad();
-    vector<float>* out_data;
-    if (numerator->get_device() == Device::cpu)
-        *out_data = *numerator->data() * *denominator->data();
-    // op_cpu(out_data, lhs.data(), rhs.data(), op);
+    auto out_data = new vector<float>(); 
+    *out_data = *numerator->data() * *denominator->data();
     auto out = make_shared<tensor>(*out_data, numerator->shape(), numerator->get_device(), req_grad);
-    out->add_child(numerator.get());
-    out->add_child(denominator.get());
+    out->add_child(numerator);
+    out->add_child(denominator);
     this->context->save_for_backward({numerator, denominator});
 
     return out;
