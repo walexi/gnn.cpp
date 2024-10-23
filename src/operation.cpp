@@ -1,6 +1,5 @@
 #include "operation.h"
 #include <memory>
-#include <iostream>
 using namespace std;
 using namespace cyg;
 
