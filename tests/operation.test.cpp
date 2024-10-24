@@ -2,7 +2,6 @@
 #include "doctest.h"
 #include "operation.h"
 #include "tensor.h"
-#include <memory>
 
 using namespace std;
 using namespace cyg;
@@ -10,7 +9,7 @@ using namespace cyg;
 
 TEST_CASE("testing context")
 {
-    auto ctx = make_shared<Context>();
+    auto ctx = make_shared<Context<tensor>>();
     ctx->saved_data["test"] = 3;
     CHECK(ctx->saved_data["n"]!=3);
     CHECK(ctx->saved_data["test"]!=5);
@@ -33,7 +32,7 @@ TEST_CASE("testing context")
 
 TEST_CASE("testing Add")
 {
-    auto add = make_shared<Add>();
+    auto add = make_shared<Add<tensor>>();
     vector<int> dims = {2,3};
     auto lhs = cyg::randn(dims, -1, 1, Device::cpu, true);
     auto rhs = cyg::randn(dims, -1, 1, Device::cpu, true);
@@ -51,7 +50,7 @@ TEST_CASE("testing Add")
 
 TEST_CASE("testing Mul")
 {
-    auto mul = make_shared<Mul>();
+    auto mul = make_shared<Mul<tensor>>();
     vector<int> dims = {2,3,4};
     auto lhs = cyg::randn(dims, -1, 1, Device::cpu, true);
     auto rhs = cyg::randn(dims, -1, 1, Device::cpu, true);
@@ -72,7 +71,7 @@ TEST_CASE("testing Mul")
 
 TEST_CASE("testing Div")
 {
-    auto div = make_shared<Div>();
+    auto div = make_shared<Div<tensor>>();
     vector<int> dims = {2,3,4};
     auto numerator = cyg::randn(dims, -1, 1, Device::cpu, true);
     auto denominator = cyg::randn(dims, -1, 1, Device::cpu, true);
@@ -83,7 +82,7 @@ TEST_CASE("testing Div")
     div->backward(incoming_gradients);
     auto numerator_grad = *incoming_gradients * cyg::pow(*denominator->data(),-1); //y=a*b, dy/da = b = 1 * b
     CHECK(equal(numerator_grad.cbegin(), numerator_grad.cend(), numerator->get_grad()->cbegin()));
-    auto denominator_grad = *incoming_gradients * *numerator->data() * cyg::pow(*denominator->data(), 2); //dy/db = a*b**-2
+    auto denominator_grad = (*incoming_gradients * -1) * (*numerator->data() / cyg::pow(*denominator->data(), 2)); //dy/db = -a*b**-2
     CHECK(equal(denominator_grad.cbegin(), denominator_grad.cend(), denominator->get_grad()->cbegin()));
     div.reset();
     numerator.reset();
