@@ -29,10 +29,10 @@ namespace cyg
             Operation(){
                 this->context = std::make_unique<Context<T>>();
             };
-            // @todo check guarantee that input tensors 'stay alive' for the backward pass by sharing ownership
-            // may not be necessary in a single threaded env, but i suppose it will be needed to provide guarantee in a multithreaded multiprocess env
+            // @todo check guarantee that input tensors 'stay alive' for the backward pass by 'sharing ownership'
+            // may not be necessary in a single threaded env, but i suppose it will be needed to provide a guarantee in a multithreaded/multiprocess env
             // confirm for multithreaded multiprocess env when you start training your models/cuda integration
-            // for now, use const ref to for some speed up
+            // for now, use const ref for some speed up
             virtual std::shared_ptr<T> forward(const std::shared_ptr<T>& lhs, const std::shared_ptr<T>& rhs); //for binary operator
             virtual std::shared_ptr<T> forward(const std::shared_ptr<T>& lhs); //for unary operator
             virtual void backward(std::vector<float>* incoming_grad);
