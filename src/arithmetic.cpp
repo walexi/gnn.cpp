@@ -63,8 +63,7 @@ std::vector<float> cyg::mean(const std::vector<float>& v1, std::vector<int>& tdi
     vector<float> out_data;
     int start = 0;
     while(start<v1.size()){
-        int m = start;
-        for(int k=0;k<shift;k++){
+        for(int m=start;m<start+shift;m++){
             int c = 0;
             float s = 0.0;
             do{
@@ -73,7 +72,6 @@ std::vector<float> cyg::mean(const std::vector<float>& v1, std::vector<int>& tdi
             }
             while(c<nums);
             out_data.push_back(s/nums);
-            m+=1;
         }
         start+=(shift*nums);
     }
