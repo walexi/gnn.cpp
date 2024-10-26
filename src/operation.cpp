@@ -217,7 +217,6 @@ template<>void cyg::Mean<tensor>::backward(std::vector<float>* incoming_grad)
 
 template<>std::shared_ptr<tensor> cyg::Exp<tensor>::forward(const std::shared_ptr<tensor>& t)
 {
-    // assertm(dims<3 && dims>-1, "current implementation only works for dims in the range [0,2]");
     auto out_data = new(nothrow) vector<float>();
     if(out_data==nullptr) throw runtime_error("insufficient memory");
 
