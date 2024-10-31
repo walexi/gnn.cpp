@@ -1,5 +1,6 @@
 #include "operation.h"
 #include "tensor.h"
+#include "util.h"
 #include <memory>
 #include <iostream>
 #include <numeric>
@@ -173,23 +174,6 @@ void cyg::Pow<tensor<float>>::backward(std::valarray<float> *incoming_grad)
     this->context.reset();
 }
 
-inline tuple<valarray<size_t>, valarray<size_t>, valarray<size_t>> generate_idxs(const vector<size_t> tdims, const int &n_elements, const int &dim)
-{
-    valarray<size_t> strides(tdims.size());
-    size_t s = 1;
-    for (int i = tdims.size() - 1; i >= 0; --i)
-    {
-        strides[i] = s;
-        s *= tdims[i];
-    }
-    valarray<size_t> sizes(tdims.data(), tdims.size());
-    sizes[dim] = 1;
-    valarray<size_t> id_data(n_elements);
-    std::iota(begin(id_data), end(id_data), 0);
-    const valarray<size_t> idxs = id_data[std::gslice(0, sizes, strides)];
-
-    return {strides, sizes, idxs};
-}
 template <>
 std::shared_ptr<tensor<float>> cyg::Mean<tensor<float>>::forward(const std::shared_ptr<tensor<float>> &base, const int &dim, const bool &keepdim)
 {
@@ -319,13 +303,10 @@ std::shared_ptr<tensor<float>> cyg::Sum<tensor<float>>::forward(const std::share
         std::tie(strides, sizes, idxs) = generate_idxs(base->shape(), base->n_elements(), dim);
         valarray<float> data = *base->data();
         out_data->resize(idxs.size());
-        if (out_data == nullptr)
-            throw runtime_error("insufficient memory");
         //@todo improve using gslice
-        for (int i = 0; i < idxs.size(); i++)
+        for (int i = 0; i < idxs.size(); ++i)
         {
-            auto m = valarray(data[std::slice(idxs[i], base->shape()[dim], strides[dim])]).sum();
-            (*out_data)[i] = m;
+            (*out_data)[i] = valarray(data[std::slice(idxs[i], base->shape()[dim], strides[dim])]).sum();
         };
         new_dims.assign(begin(sizes), end(sizes));
     }
