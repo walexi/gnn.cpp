@@ -25,7 +25,7 @@ const char ERROR_RANK_MISMATCH[] = "tensors are of different ranks";
 const char ERROR_OUT_OF_RANGE[] = "out of bound range";
 const char ERROR_INVALID_DIMS[] = "dims cannot be empty or zero";
 const char ERROR_NON_SCALAR_BACKPROP[] = "pass in tensor to backprop on non-scalar tensor";
-const char ERROR_MM_COMPATIBLE[] = "tensors are not compatible, tensors should of shape [..., A] and [A ,...]";
+const char ERROR_MM_COMPATIBLE[] = "tensors are not compatible, tensors should of shape [...,A,B] and [...,B,A]";
 const char ERROR_OUT_OF_BOUND_DIM[] = "dim is out of range";
 const char ERROR_GRAD_MISMATCH[] = "size mismatch, incoming gradient must be same dimension with tensor";
 
@@ -159,15 +159,21 @@ inline void CHECK_VALID_INDEX(std::vector<size_t> dims, std::vector<size_t> tdim
 }
 
 /**
- * @brief check valid dims for indexing a tensor given the tensor's dims
+ * @brief check valid dims matmul operation
+ *  r_tensor = AxBxCx..xDxE
+ *  l_tensor = AxBxCx..xExD
+ *  r_tensor mm l_tensor = AxBxCx...xDxD
  *
  * @param dims(type std::vector<int>)
  * @param tdims(type std::vector<int>)
  */
-inline void CHECK_MM_DIMS(std::vector<size_t> dims, std::vector<size_t> tdims)
+inline void CHECK_MM_DIMS(std::vector<size_t> rdims, std::vector<size_t> ldims)
 {
-    assertm(dims[-1] == tdims[0], ERROR_MM_COMPATIBLE);
-    if (dims[-1] != tdims[0])
+    std::iter_swap(ldims.rbegin(), ldims.rbegin()+1);
+    int min_d = std::min(rdims.size(), ldims.size());
+    bool isValid = std::equal(rdims.rbegin(), rdims.rbegin()+min_d, ldims.rbegin(), ldims.rbegin()+min_d);
+    assertm(isValid, ERROR_MM_COMPATIBLE);
+    if (!isValid)
         throw std::runtime_error(ERROR_MM_COMPATIBLE);
 }
 
@@ -222,7 +228,7 @@ inline void CHECK_VALID_RANGE(const int &dim, const int &rank, const int &low = 
 inline std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>, std::valarray<std::size_t>> generate_idxs(const std::vector<std::size_t> tdims, const int &dim)
 {
     std::valarray<std::size_t> strides(tdims.size());
-    int n_elements = std::accumulate(tdims.begin(), tdims.end(), 1, std::multiplies<int>());
+    int n_elements = std::accumulate(tdims.cbegin(), tdims.cend(), 1, std::multiplies<int>());
     std::size_t s = 1;
     for (int i = tdims.size() - 1; i >= 0; --i)
     {
@@ -255,7 +261,7 @@ std::stringstream printND(std::valarray<T> nd_data, std::vector<std::size_t> sha
     std::string dl(shape.size(), '[');
     out << dl;
     std::valarray<size_t> strides, sizes, idxs;
-    std::tie(strides, sizes, idxs) = generate_idxs(shape, n_elements, shape.size() - 1);
+    std::tie(strides, sizes, idxs) = generate_idxs(shape, shape.size() - 1);
     strides[shape.size() - 1] = strides[0] * shape[0];
     auto MAX_WIDTH = std::to_string(nd_data.max()).length() + 1;
     for (auto i = 1; auto idx : idxs)
