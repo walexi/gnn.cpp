@@ -2,9 +2,15 @@
 #define UTIL_H
 #include <algorithm>
 #include <numeric>
-
+#include <valarray>
+#include <vector>
+#include <algorithm>
+#include <numeric>
+#include <string>
 #include <assert.h>
-
+#include <sstream>
+#include <random>
+#include <iomanip>
 #define NDEBUG
 #include <cassert>
 
@@ -22,15 +28,76 @@ const char ERROR_NON_SCALAR_BACKPROP[] = "pass in tensor to backprop on non-scal
 const char ERROR_MM_COMPATIBLE[] = "tensors are not compatible, tensors should of shape [..., A] and [A ,...]";
 const char ERROR_OUT_OF_BOUND_DIM[] = "dim is out of range";
 const char ERROR_GRAD_MISMATCH[] = "size mismatch, incoming gradient must be same dimension with tensor";
+
+std::default_random_engine e(std::time(nullptr));
+
+/**
+ * @brief generate a floating-point number from a uniform dist in the range [low, high)
+ * pdf = 1/(high-low)
+ *
+ * @param low(type int)
+ * @param high(type int)
+ *
+ * @return random number(type float)
+ */
+float generate_random(int low, int high)
+{
+    std::uniform_real_distribution<float> u(low, high);
+    return u(e);
+}
+/**
+ * @brief use to create am array with the input dims and value,
+ *
+ * @param dims(type std::array<int, N>) //@todo array
+ * @param value(type int)
+ *
+ * @return unique_ptr of to an array of type T(type std::unique_ptr<std::valarray<T>>)
+ */
+template <class T>
+std::valarray<T> *initialize(std::vector<size_t> dims, T value = 1)
+{
+    auto n_elements = std::accumulate(dims.begin(), dims.end(), 1, std::multiplies<size_t>());
+    auto data = new (std::nothrow) std::valarray<T>(n_elements);
+    if (data == nullptr)
+        throw std::runtime_error("insufficient memory");
+    std::fill_n(std::begin(*data), n_elements, value);
+
+    return data;
+};
+
+/**
+ * @brief calculate the index of an element in a flatten array given the ND dims/cordinates
+ *
+ * @param t_dims(type std::valarray<int>) N_D dims of the tensor
+ * @param dims(type std::valarray<int>) N_D dims of the element
+ *
+ * @return the 1D index of the element (type int)
+ * */
+auto get_index(std::vector<std::size_t> *t_dims, std::vector<std::size_t> dims)
+{
+    // CHECK_ARGS_DIMS(dims, -1, t_dims);
+    std::transform(dims.cbegin(), dims.cend(), next(t_dims->cbegin()), dims.begin(), std::multiplies<std::size_t>());
+    auto index = std::accumulate(dims.cbegin(), dims.cend(), dims[dims.size() - 1]);
+    return index;
+};
+
+/**
+ * @brief resize to t1
+ */
+void resize(const int t1_size, std::valarray<float> *t2, const int &value = 1)
+{
+    if (t1_size > t2->size())
+        t2->resize(t1_size - t2->size(), value);
+    // else
+}
 /**
  *
  * @brief to check inputs to an inplace binary operator
  *
  * @param lhs(type std::shared_ptr<T>)
- * @param rhs(type std::shared_ptr<T>)
  */
 template <class T>
-void CHECK_ARGS_IN_PLACE_OPS(const std::shared_ptr<T> &lhs, const std::shared_ptr<T> &rhs)
+void CHECK_ARGS_IN_PLACE_OPS(const std::shared_ptr<T> &lhs)
 {
     assertm(lhs->requires_grad == false, ERROR_IN_PLACE_OP_LEAF);
     if (lhs->require_grad())
@@ -110,20 +177,52 @@ inline void CHECK_MM_DIMS(std::vector<size_t> dims, std::vector<size_t> tdims)
  * @param dims(type std::vector<int>)
  * @param tdims(type std::vector<int>)
  */
-inline void CHECK_VALID_RANGE(const int& dim, const int& rank, const int& low=0)
+inline void CHECK_VALID_RANGE(const int &dim, const int &rank, const int &low = 0)
 {
     assertm(low <= dim < rank, ERROR_OUT_OF_BOUND_DIM);
-    if (dim >= rank || dim < low) throw std::runtime_error(ERROR_OUT_OF_BOUND_DIM);
+    if (dim >= rank || dim < low)
+        throw std::runtime_error(ERROR_OUT_OF_BOUND_DIM);
 }
 
 /**
  * @author olawale onabola
- * @brief generate ids 
+ * @brief generate start ids along a dimension
+ * for ex
+ * given a 5x4 matrix
+ *           [ 1,  2,  3, 4  ]
+ *           [ 5,  6,  7, 8  ]
+ *           [ 9, 10, 11, 12 ]
+ *           [ 13,14, 15, 16 ]
+ *           [ 17,18, 19, 20 ]
+ * 
+ * start ids along the row, i.e 5, has 5 elements and are = 1, 5, 9, 13, 17
+ * 
+ * start ids along the col i.e 4, has 4 elements and are = 1, 2, 3, 4
+ * 
+ * and this can be extended to more than 2D, N1xN2xN3x..xN,  N dimensions 
+ * 
+ * for 2x5x4
+ *           [[[ 1,   2,  3, 4  ]
+*              [ 5,   6,  7, 8  ]
+ *             [ 9,  10, 11, 12 ]
+ *             [ 13, 14, 15, 16 ]
+ *             [ 17, 18, 19, 20 ]]
+ *             
+ *            [[ 21, 22, 23, 24 ]
+ *             [ 25, 26, 27, 28 ]
+ *             [ 29, 30, 31, 32 ]
+ *             [ 33, 34, 35, 36 ]
+ *             [ 37, 38, 39, 40 ]]]
+ * 
+ * start ids across the col, i.e 4, has 2*5 elements and are = 1, 5, 9, 13, 17, 21, 25, 29, 33, 37
+ * start ids across the row i.e 5, has 2*4 elements and are = 1, 2, 3, 4, 21, 22, 23, 24
+ * start ids across the batch, i.e 2 has 5*4 elements and are =  1,2,3,4,5,6,7,8,9,....,19,20
  */
 
-inline std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>, std::valarray<std::size_t>> generate_idxs(const std::vector<std::size_t> tdims, const int &n_elements, const int &dim)
+inline std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>, std::valarray<std::size_t>> generate_idxs(const std::vector<std::size_t> tdims, const int &dim)
 {
     std::valarray<std::size_t> strides(tdims.size());
+    int n_elements = std::accumulate(tdims.begin(), tdims.end(), 1, std::multiplies<int>());
     std::size_t s = 1;
     for (int i = tdims.size() - 1; i >= 0; --i)
     {
@@ -137,5 +236,53 @@ inline std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>, std::v
     const std::valarray<std::size_t> idxs = id_data[std::gslice(0, sizes, strides)];
 
     return {strides, sizes, idxs};
+}
+
+/**
+ * @brief create a formatted string rep of an ND vector with the given dims
+ *
+ * @param nd_data(type std::valarray<float>)
+ * @param shape(type std::vector<int>)
+ *
+ * @return stringstream object(type std::stringstream)
+ */
+template <class T>
+std::stringstream printND(std::valarray<T> nd_data, std::vector<std::size_t> shape)
+{
+    int n_elements = nd_data.size();
+    std::stringstream out;
+    out.setf(std::numeric_limits<T>::digits10);
+    std::string dl(shape.size(), '[');
+    out << dl;
+    std::valarray<size_t> strides, sizes, idxs;
+    std::tie(strides, sizes, idxs) = generate_idxs(shape, n_elements, shape.size() - 1);
+    strides[shape.size() - 1] = strides[0] * shape[0];
+    auto MAX_WIDTH = std::to_string(nd_data.max()).length() + 1;
+    for (auto i = 1; auto idx : idxs)
+    {
+        if (i != n_elements && i != 1)
+        {
+            auto count = std::count_if(std::begin(strides), std::end(strides), [=](int s)
+                                       { return idx % s == 0; });
+            std::string ddl(count, ']'), sp(count, '\n'), dfl(count, '[');
+            out << ddl << "," << sp;
+            out.width(shape.size() + 1);
+            out << dfl;
+        }
+        std::valarray<T> sl = nd_data[std::slice(idx, shape[shape.size() - 1], 1)];
+        out.width(MAX_WIDTH - 2);
+        out << std::setprecision(4) << std::right << sl[0];
+        std::for_each(std::begin(sl) + 1, std::end(sl), [&](T n)
+                      { 
+            out<<",";
+            out.width(MAX_WIDTH);
+            out<<std::setprecision(4)<<std::right<<n; });
+        out << " ";
+        i++;
+    }
+    std::string ddl(shape.size(), ']');
+    out << ddl;
+
+    return out;
 }
 #endif
