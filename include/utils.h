@@ -28,7 +28,7 @@ const char ERROR_NON_SCALAR_BACKPROP[] = "pass in tensor to backprop on non-scal
 const char ERROR_MM_COMPATIBLE[] = "tensors are not compatible, tensors should of shape [...,A,B] and [...,B,A]";
 const char ERROR_OUT_OF_BOUND_DIM[] = "dim is out of range";
 const char ERROR_GRAD_MISMATCH[] = "size mismatch, incoming gradient must be same dimension with tensor";
-
+const char ERROR_TRANSPOSE[] = "invalid inp";
 std::default_random_engine e(std::time(nullptr));
 
 /**
@@ -54,7 +54,7 @@ float generate_random(int low, int high)
  * @return unique_ptr of to an array of type T(type std::unique_ptr<std::valarray<T>>)
  */
 template <class T>
-std::valarray<T> *initialize(std::vector<size_t> dims, T value = 1)
+std::valarray<T>* initialize(std::vector<size_t> dims, T value = 1)
 {
     auto n_elements = std::accumulate(dims.begin(), dims.end(), 1, std::multiplies<size_t>());
     auto data = new (std::nothrow) std::valarray<T>(n_elements);
@@ -86,9 +86,21 @@ auto get_index(std::vector<std::size_t> *t_dims, std::vector<std::size_t> dims)
  */
 void resize(const int t1_size, std::valarray<float> *t2, const int &value = 1)
 {
+    // References become invalid on resize() or when the array is destructed.
     if (t1_size > t2->size())
         t2->resize(t1_size - t2->size(), value);
     // else
+}
+
+/**
+ * 
+ * 
+ */
+inline void CHECK_TRANSPOSE(std::vector<size_t> s, int a, int b)
+{
+    const bool isValid = (0<=a<s.size()) && (0<=b<s.size()) && (std::abs(a-b)==1);
+    assertm(isValid, ERROR_TRANSPOSE);
+    if(!isValid) throw std::runtime_error(ERROR_TRANSPOSE);
 }
 /**
  *
@@ -167,7 +179,7 @@ inline void CHECK_VALID_INDEX(std::vector<size_t> dims, std::vector<size_t> tdim
  * @param dims(type std::vector<int>)
  * @param tdims(type std::vector<int>)
  */
-inline void CHECK_MM_DIMS(std::vector<size_t> rdims, std::vector<size_t> ldims)
+inline void CHECK_MM_DIMS(std::vector<size_t> ldims, std::vector<size_t> rdims)
 {
     std::iter_swap(ldims.rbegin(), ldims.rbegin()+1);
     int min_d = std::min(rdims.size(), ldims.size());
@@ -175,6 +187,13 @@ inline void CHECK_MM_DIMS(std::vector<size_t> rdims, std::vector<size_t> ldims)
     assertm(isValid, ERROR_MM_COMPATIBLE);
     if (!isValid)
         throw std::runtime_error(ERROR_MM_COMPATIBLE);
+}
+
+inline void CHECK_NO_BROADCAST(std::vector<size_t> ldims, std::vector<size_t> rdims)
+{
+    bool isValid = ldims.size()>=rdims.size();
+    assertm(isValid, "The rank of the lhs tensor must be equal to or more than the rhs tensor");
+    if(!isValid) throw std::runtime_error("The rank of the lhs tensor must be equal to or more than the rhs tensor");
 }
 
 /**
@@ -263,7 +282,7 @@ std::stringstream printND(std::valarray<T> nd_data, std::vector<std::size_t> sha
     std::valarray<size_t> strides, sizes, idxs;
     std::tie(strides, sizes, idxs) = generate_idxs(shape, shape.size() - 1);
     strides[shape.size() - 1] = strides[0] * shape[0];
-    auto MAX_WIDTH = std::to_string(nd_data.max()).length() + 1;
+    auto MAX_WIDTH = std::to_string(nd_data.max()).length();
     for (auto i = 1; auto idx : idxs)
     {
         if (i != n_elements && i != 1)
@@ -276,12 +295,12 @@ std::stringstream printND(std::valarray<T> nd_data, std::vector<std::size_t> sha
             out << dfl;
         }
         std::valarray<T> sl = nd_data[std::slice(idx, shape[shape.size() - 1], 1)];
-        out.width(MAX_WIDTH - 2);
+        out.width(MAX_WIDTH - 1);
         out << std::setprecision(4) << std::right << sl[0];
         std::for_each(std::begin(sl) + 1, std::end(sl), [&](T n)
                       { 
             out<<",";
-            out.width(MAX_WIDTH);
+            out.width(MAX_WIDTH+1);
             out<<std::setprecision(4)<<std::right<<n; });
         out << " ";
         i++;
