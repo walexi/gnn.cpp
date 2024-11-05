@@ -465,7 +465,7 @@ namespace cyg
 
         void backward(T* incoming_grad) override
         {
-            //grad of a transpose is an identity matrix
+            
             auto var = this->context->get_variables();
             assertm(var.size() == 1, "invalid");
             auto base = var[0];
