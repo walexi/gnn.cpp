@@ -29,9 +29,10 @@ namespace cyg
     class tensor : public std::enable_shared_from_this<tensor<T>>
     {
     private:
-        std::valarray<T> *d; // good enough to use just valarray, wo unique_ptr
+        std::valarray<T> *d = nullptr; // good enough to use just valarray, wo unique_ptr
+        //@todo use smart ptr for d and grad
         std::vector<size_t> dims;
-        std::valarray<float> *grad;
+        std::valarray<float> *grad = nullptr;
         Device device;
         bool requires_grad;
 
@@ -431,6 +432,8 @@ namespace cyg
                 (*grad_data)[std::slice(id, n_repeat, strides[dim])] = (*this->grad)[i++];
                 // (*out_d)[std::slice(id, )]
             }
+            delete this->d; //@todo use shared_ptr for d & grad
+            delete this->grad;
             this->d = out_data;
             this->grad = grad_data;
         }
@@ -456,7 +459,7 @@ namespace cyg
      *
      * @return generated tensor(type std::shared_ptr<tensor>)
      */
-    std::shared_ptr<tensor<float>> randn(std::vector<size_t> &dims, int low = -1, int high = 1, Device device = Device::cpu, bool requires_grad = false)
+    std::shared_ptr<tensor<float>> randn(std::vector<size_t> dims, int low = -1, int high = 1, Device device = Device::cpu, bool requires_grad = false)
     {
         assertm(low < high, "low must be lower than high, pls check your input params");
         if (low >= high)
