@@ -277,9 +277,9 @@ namespace cyg
          *
          * @return tensor (type cyg::tensor)
          */
-        std::shared_ptr<tensor<T>> mean(const int &dim, const bool &keepdims = false)
+        std::shared_ptr<tensor<T>> mean(const int &dim=-1, const bool &keepdims = false)
         {
-            CHECK_VALID_RANGE(dim, this->rank());
+            CHECK_VALID_RANGE(dim, this->rank(), -1);
             auto mean_op = std::make_shared<Mean<tensor<T>>>();
             auto output = mean_op->forward(this->shared_from_this(), dims, keepdims);
             if (this->requires_grad)
@@ -328,6 +328,7 @@ namespace cyg
          */
         std::shared_ptr<tensor<T>> sum(const int &dim = -1, const bool &keepdim = false)
         {
+            CHECK_VALID_RANGE(dim, this->rank(), -1);
             auto sum_op = std::make_shared<Sum<tensor<T>>>();
             auto output = sum_op->forward(this->shared_from_this(), dim, keepdim);
             if (this->requires_grad)
@@ -403,8 +404,8 @@ namespace cyg
             return output;
         };
 
-        std::shared_ptr<tensor<T>> var(int dim, bool keepdim=true){
-            CHECK_VALID_RANGE(dim, this->rank());
+        std::shared_ptr<tensor<T>> var(const int& dim=-1, const bool& keepdim=true){
+            CHECK_VALID_RANGE(dim, this->rank(), -1);
             auto var_op = std::make_shared<Var<tensor<T>>>();
             auto output = var_op->forward(this->shared_from_this(), dim, keepdim);
             if(this->requires_grad) output->grad_fn = var_op;
