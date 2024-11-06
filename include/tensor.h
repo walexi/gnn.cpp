@@ -38,6 +38,17 @@ namespace cyg
     public:
         typedef T value_type;
         std::shared_ptr<Operation<tensor<T>>> grad_fn;
+        explicit tensor(std::vector<size_t> dims, Device device = Device::cpu, bool requires_grad = false) : dims(dims), device(device), requires_grad(requires_grad)
+        {
+            CHECK_VALID_DIMS(dims);
+            this->d = initialize<T>(dims, 1);
+            if (requires_grad)
+            {
+                if (typeid(T) != typeid(float &))
+                    throw std::runtime_error(ERROR_GRAD_DTYPE);
+                this->zero_grad();
+            }
+        };
         explicit tensor(std::vector<size_t> dims, int d=0, Device device = Device::cpu, bool requires_grad = false) : dims(dims), device(device), requires_grad(requires_grad)
         {
             CHECK_VALID_DIMS(dims);
@@ -202,7 +213,7 @@ namespace cyg
         };
         std::shared_ptr<tensor<T>> mm(const std::shared_ptr<tensor<T>> other){
             CHECK_MM_DIMS(this->shape(), other->shape());
-            CHECK_NO_BROADCAST(this->shape(), other->shape());
+            // CHECK_NO_BROADCAST(this->shape(), other->shape());
             auto mat_mul_op = std::make_shared<MatMul<tensor<T>>>();
             auto output = mat_mul_op->forward(this->shared_from_this(), other);
             if(this->requires_grad) output->grad_fn = mat_mul_op;
@@ -268,10 +279,7 @@ namespace cyg
          */
         std::shared_ptr<tensor<T>> mean(const int &dim, const bool &keepdims = false)
         {
-            std::string err_msg = std::format(std::string_view("index out of range, it should be in the range [0, {}]"), this->rank() - 1);
-            assertm(0 <= dims < this->rank(), err_msg);
-            if (!(0 <= dims < this->rank()))
-                throw std::runtime_error(err_msg);
+            CHECK_VALID_RANGE(dim, this->rank());
             auto mean_op = std::make_shared<Mean<tensor<T>>>();
             auto output = mean_op->forward(this->shared_from_this(), dims, keepdims);
             if (this->requires_grad)
@@ -395,6 +403,37 @@ namespace cyg
             return output;
         };
 
+        std::shared_ptr<tensor<T>> var(int dim, bool keepdim=true){
+            CHECK_VALID_RANGE(dim, this->rank());
+            auto var_op = std::make_shared<Var<tensor<T>>>();
+            auto output = var_op->forward(this->shared_from_this(), dim, keepdim);
+            if(this->requires_grad) output->grad_fn = var_op;
+            return output;
+        }
+
+        void uniform(const float& low, const float& high){ // inplace
+            std::generate(begin((*this->d)), end((*this->d)), [low, high](){ return generate_random(low, high); });
+        }
+        void repeat(const int& dim, const int& n_repeat){//in place op
+            CHECK_VALID_RANGE(dim, this->rank());
+            this->dims[dim]=n_repeat;
+            int n_elements = std::accumulate(this->dims.begin(), this->dims.end(), 1, std::multiplies<int>());
+            auto out_data = new (std::nothrow) std::valarray<T>(n_elements);
+            auto grad_data = new (std::nothrow) std::valarray<float>(n_elements);
+            if(grad_data==nullptr || out_data==nullptr) throw std::runtime_error("insufficient memory");
+            std::valarray<size_t> strides, idxs;
+            std::tie(strides, idxs) = generate_idxs(this->dims, dim);
+
+            for(int i=0; const auto& id:idxs)
+            {
+                (*out_data)[std::slice(id, n_repeat, strides[dim])] = (*this->d)[i];
+                (*grad_data)[std::slice(id, n_repeat, strides[dim])] = (*this->grad)[i++];
+                // (*out_d)[std::slice(id, )]
+            }
+            this->d = out_data;
+            this->grad = grad_data;
+        }
+        
         // tensor(tensor&& other);
         // tensor& operator=(tensor&& other);
         // disable copy constructor and copy assigment operator
@@ -481,6 +520,7 @@ namespace cyg
     {
         return std::make_shared<tensor<T>>(input_tensor->shape(), 0, device, requires_grad);
     };
+
     template <class T>
     std::shared_ptr<tensor<T>> operator+(std::shared_ptr<tensor<T>> lhs, const std::shared_ptr<tensor<T>> rhs) { return lhs->add(rhs); };
     template <class T>
