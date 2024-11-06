@@ -56,11 +56,12 @@ namespace nn
     public:
         Linear(size_t in_features, size_t out_features, bool bias = true, cyg::Device device = cyg::Device::cpu): Module(), bias(bias){
             std::vector<size_t> weight_feat {out_features, in_features}, bias_feat {out_features};
-            this->add_params({make_pair("weights", std::make_shared<cyg::tensor<float>>(weight_feat, 1, device, true))});
+            this->add_params({make_pair("weight", std::make_shared<cyg::tensor<float>>(weight_feat, 1, device, true))});
             if(bias) this->add_params({make_pair("bias", std::make_shared<cyg::tensor<float>>(bias_feat, 1, device, true))});
             this->reset_parameters();
         };
         // https://web.archive.org/web/20230129061039/http://github.com/torch/nn/blob/master/Linear.lua#L18
+        // https://arxiv.org/pdf/1502.01852
         // a silly/lazy implementation of kaiming initialization
         void reset_parameters(){
             const float bound = 1/std::sqrt(this->params["weights"]->shape()[this->params["weights"]->rank()-1]);
