@@ -1,9 +1,9 @@
 #ifndef NN_H
 #define NN_H
 #include "tensor.h"
+
 #include <memory>
 #include <vector>
-
 #include <unordered_map>
 #include <valarray>
 #include <array>
@@ -14,66 +14,83 @@
 
 namespace nn
 {
-    //grad=true, dtype=float
-
-    class Parameter : public cyg::tensor<float>
-    {
-    public:
-        Parameter(std::vector<size_t> &dims, cyg::Device device = cyg::Device::cpu) : cyg::tensor<float>(dims, 1, device, true){};
-    };
+    // grad=true, dtype=float
 
     class Module
     {
     protected:
-        bool isTraining = true;
-        std::unordered_map<std::string, std::shared_ptr<cyg::tensor<float>>> params; //params are tensor with req_grad=true
+        bool isTraining;
+        std::unordered_map<std::string, std::shared_ptr<cyg::tensor<float>>> params; // params are tensor with req_grad=true
+        std::unordered_map<std::string, std::shared_ptr<Module>> modules;            // @todo use template to handle both modules and params
 
     public:
         Module() {};
-        virtual void add_params(std::vector<std::pair<std::string, std::shared_ptr<cyg::tensor<float>>>> input_params){
-            for (auto p : input_params) params.insert(p);
+        virtual void add_params(std::vector<std::pair<std::string, std::shared_ptr<cyg::tensor<float>>>> input_params)
+        {
+            for (auto& p : input_params)
+                this->params.insert(p); //@todo fix throw error
         };
-        virtual void zero_grad(){  
+        virtual void add_modules(std::vector<std::pair<std::string, std::shared_ptr<Module>>> input_modules)
+        {
+            for (auto& m : input_modules)
+                modules.insert(m);
+        };
+        virtual void zero_grad()
+        {
+            for (auto &m : modules) m.second->zero_grad();
             for (auto &p : params) p.second->zero_grad();
         };
-        virtual void train(const bool& isTrain=true){
-            for(auto& param : this->params){
-                param.second->enable_grad(isTrain);
-            }
-            this->isTraining = isTrain;
+        virtual void eval() { train(false); };
+        virtual void train(const bool &isTrain)
+        {
+            for (auto &p : params) p.second->enable_grad(isTrain);
+            for (auto &m : modules) m.second->train(isTrain);
+            isTraining = isTrain;
         };
-        virtual void eval(){ this->train(false);};
-        virtual std::shared_ptr<cyg::tensor<float>> operator()(const std::shared_ptr<cyg::tensor<float>> &input_tensor) { return this->forward(input_tensor); };//you prolly dont wanna pass in a tensor without grad enabled
-        virtual std::shared_ptr<cyg::tensor<float>> forward(const std::shared_ptr<cyg::tensor<float>>& input_tensor){ return std::shared_ptr<cyg::tensor<float>>();};
-        Module(const Module &m) : params(m.params) {}; // rule of three/five/zero
+        virtual std::shared_ptr<cyg::tensor<float>> operator()(const std::shared_ptr<cyg::tensor<float>> &input_tensor) { return this->forward(input_tensor); }; // you prolly dont wanna pass in a tensor without grad enabled
+        virtual std::shared_ptr<cyg::tensor<float>> forward(const std::shared_ptr<cyg::tensor<float>> &input_tensor) { return std::shared_ptr<cyg::tensor<float>>(); };
+        Module(const Module &m) : params(m.params), modules(m.modules) {}; // rule of three/five/zero
         virtual std::unordered_map<std::string, std::shared_ptr<cyg::tensor<float>>> parameters() const { return this->params; }
-        ~Module(){params.clear();}
+        virtual std::unordered_map<std::string, std::shared_ptr<Module>> children() const { return this->modules; }
+        ~Module()
+        {
+            params.clear();
+            modules.clear();
+        }
     };
 
     class Linear : public Module
     {
         bool bias;
+        size_t in_features;
+        size_t out_features;
         // y = input_tensor(dd * in) * w(out * in).transpose() + c(out * 1)
     public:
-        Linear(size_t in_features, size_t out_features, bool bias = true, cyg::Device device = cyg::Device::cpu): Module(), bias(bias){
-            std::vector<size_t> weight_feat {out_features, in_features}, bias_feat {out_features};
-            this->add_params({make_pair("weight", std::make_shared<cyg::tensor<float>>(weight_feat, 1, device, true))});
-            if(bias) this->add_params({make_pair("bias", std::make_shared<cyg::tensor<float>>(bias_feat, 1, device, true))});
+        Linear(size_t in_features, size_t out_features, bool bias = true, cyg::Device device = cyg::Device::cpu) : Module(), bias(bias), in_features(in_features), out_features(out_features)
+        {
+            std::vector<size_t> weight_feat{out_features, in_features}, bias_feat{out_features};
+            auto w = std::make_shared<cyg::tensor<float>>(weight_feat, 1, device, true);
+            auto b =  std::make_shared<cyg::tensor<float>>(bias_feat, 1, device, true);
+            this->add_params({{"weight", w}});
+            if (bias) this->add_params({{"bias", b}});
             this->reset_parameters();
         };
         // https://web.archive.org/web/20230129061039/http://github.com/torch/nn/blob/master/Linear.lua#L18
         // https://arxiv.org/pdf/1502.01852
         // a silly/lazy implementation of kaiming initialization
-        void reset_parameters(){
-            const float bound = 1/std::sqrt(this->params["weights"]->shape()[this->params["weights"]->rank()-1]);
-            this->params["weights"]->uniform(-bound, bound);
-            if(this->bias) this->params["bias"]->uniform(-bound, bound);
+        void reset_parameters()
+        {
+            const float bound = 1 / std::sqrt(in_features);
+            this->params["weight"]->uniform(-bound, bound);
+            if (this->bias) this->params["bias"]->uniform(-bound, bound);
         }
-        std::shared_ptr<cyg::tensor<float>> forward(const std::shared_ptr<cyg::tensor<float>> &input_tensor){
-            auto w = this->params["weights"];
-            auto output = input_tensor->mm(w->transpose(w->rank()-1, w->rank()-2));
-            if(this->bias) {
-                for(int i=0;i<output->rank()-1; i++) {
+        std::shared_ptr<cyg::tensor<float>> forward(const std::shared_ptr<cyg::tensor<float>>& input_tensor)
+        {
+            auto output = input_tensor->mm(this->params["weight"]->transpose(-1, -2));
+            if (this->bias)
+            {
+                for (int i = 0; i < output->rank() - 1; i++)
+                {
                     this->params["bias"]->unsqueeze(0);
                     this->params["bias"]->repeat(0, output->shape()[i]);
                 };
@@ -83,12 +100,14 @@ namespace nn
         };
     };
 
-
-    class Sequential
-    {
-    protected:
-        std::shared_ptr<std::map<string, std::shared_ptr<Module>>> modules;
-
+    // class Sequential : Module
+    // {
+    // public:
+    //     Sequential(std::vector<std::pair<std::string, std::shared_ptr<Module>>> input) : Module()
+    //     { // can also use vector of tuples
+    //         add_modules(input);
+    //     };
+    // };
     // };
     // class ReLU : public Module
     // {
@@ -170,9 +189,6 @@ namespace nn
     //             std::shared_ptr<T> forward(const std::shared_ptr<T>& t);
     //             void backward(std::vector<float>* incoming_grad) override;
     //     };
-
-
-
 
 }
 #endif
