@@ -3,8 +3,8 @@
 
 #include "utils.h"
 #include "operation.h"
-#include "valarray"
-#include "array"
+#include <valarray>
+#include <array>
 #include <new>
 #include <iostream>
 #include <memory>
@@ -39,37 +39,28 @@ namespace cyg
     public:
         typedef T value_type;
         std::shared_ptr<Operation<tensor<T>>> grad_fn;
-        explicit tensor(std::vector<size_t> dims, Device device = Device::cpu, bool requires_grad = false) : dims(dims), device(device), requires_grad(requires_grad)
+        tensor(std::vector<size_t> dims, int value=0, Device device = Device::cpu, bool requires_grad = false): d(initialize<T>(dims, value)), dims(dims), device(device), requires_grad(requires_grad)
         {
             CHECK_VALID_DIMS(dims);
-            this->d = initialize<T>(dims, 1);
             if (requires_grad)
             {
-                if (typeid(T) != typeid(float &))
-                    throw std::runtime_error(ERROR_GRAD_DTYPE);
+                if (typeid(T) != typeid(float &)) throw std::runtime_error(ERROR_GRAD_DTYPE);
                 this->zero_grad();
             }
-        };
-        explicit tensor(std::vector<size_t> dims, int d=0, Device device = Device::cpu, bool requires_grad = false) : dims(dims), device(device), requires_grad(requires_grad)
-        {
-            CHECK_VALID_DIMS(dims);
-            this->d = initialize<T>(dims, d);
-            if (requires_grad)
-            {
-                if (typeid(T) != typeid(float &))
-                    throw std::runtime_error(ERROR_GRAD_DTYPE);
-                this->zero_grad();
-            }
-        };
-        explicit tensor(std::valarray<T> &data, std::vector<size_t> dims, Device device = Device::cpu, bool requires_grad = false) : d(&data), dims(dims), device(device), requires_grad(requires_grad)
-        {
-            CHECK_VALID_DIMS(dims);
-            CHECK_SIZE(dims, data.size());
+        }
 
+        explicit tensor(std::vector<size_t> dims, std::valarray<T>* data=nullptr, Device device = Device::cpu, bool requires_grad = false) : dims(dims), device(device), requires_grad(requires_grad)
+        {
+            CHECK_VALID_DIMS(dims);
+            delete this->d;
+            if(data!=nullptr) 
+            {
+                CHECK_SIZE(dims, data->size());
+                this->d = data;
+            }else this->d = initialize<T>(dims, 0);
             if (requires_grad)
             {
-                if (typeid(T) != typeid(float &))
-                    throw std::runtime_error(ERROR_GRAD_DTYPE);
+                if (typeid(T) != typeid(float &)) throw std::runtime_error(ERROR_GRAD_DTYPE);
                 this->zero_grad();
             }
         };
@@ -88,6 +79,7 @@ namespace cyg
             else
             {
                 this->requires_grad = false;
+                delete this->grad;
                 this->grad = nullptr;
             };
         };
@@ -106,6 +98,7 @@ namespace cyg
         const bool require_grad() const { return this->requires_grad; };
         void zero_grad()
         {
+            delete this->grad;
             this->grad = initialize<float>(this->dims, 0);
         };
         const Device get_device() const { return this->device; }
@@ -124,13 +117,7 @@ namespace cyg
          */
         std::shared_ptr<tensor<T>> unsqueeze(int dim)
         {
-            bool isvalid = -this->rank() - 1 <= dim && dim <= this->rank();
-            std::string message = std::format(std::string_view("dim must be within range of [-{0}-1, {0}]"), this->rank());
-            if (!isvalid)
-            {
-                assert(message);
-                throw std::runtime_error(message);
-            }
+            CHECK_VALID_RANGE(dim, this->rank()+1, -this->rank()-1);
             this->dims.insert(this->dims.begin() + (dim < 0 ? dim + this->rank() + 1 : dim), 1);
             return this->shared_from_this();
         };
@@ -263,7 +250,7 @@ namespace cyg
          */
         std::shared_ptr<tensor<T>> pow(const float &exponent) //@todo use template
         {
-            const auto t = std::make_shared<tensor<T>>(this->dims, exponent, this->device, this->requires_grad);
+            const auto t = std::make_shared<tensor<T>>(this->dims, exponent, this->device, this->requires_grad); //@todo use named args for constructor
             auto out = this->pow(t);
             return out;
         }
@@ -278,9 +265,14 @@ namespace cyg
          *
          * @return tensor (type cyg::tensor)
          */
-        std::shared_ptr<tensor<T>> mean(const int &dim=-1, const bool &keepdims = false)
+        std::shared_ptr<tensor<T>> mean()
         {
-            CHECK_VALID_RANGE(dim, this->rank(), -1);
+            return this->mean(-this->rank()-1);
+        }
+
+        std::shared_ptr<tensor<T>> mean(const int &dim, const bool &keepdims = false)
+        {
+            CHECK_VALID_RANGE(dim, this->rank(), -this->rank()-1);
             auto mean_op = std::make_shared<Mean<tensor<T>>>();
             auto output = mean_op->forward(this->shared_from_this(), dims, keepdims);
             if (this->requires_grad)
@@ -327,42 +319,50 @@ namespace cyg
          *
          * @return tensor (type std::shared_ptr<cyg::tensor>)
          */
-        std::shared_ptr<tensor<T>> sum(const int &dim = -1, const bool &keepdim = false)
+        std::shared_ptr<tensor<T>> sum()
         {
-            CHECK_VALID_RANGE(dim, this->rank(), -1);
+            return this->sum(-this->rank()-1);
+        }
+
+        std::shared_ptr<tensor<T>> sum(const int &dim, const bool &keepdim = false)
+        {
+            CHECK_VALID_RANGE(dim, this->rank(), -this->rank()-1);
             auto sum_op = std::make_shared<Sum<tensor<T>>>();
             auto output = sum_op->forward(this->shared_from_this(), dim, keepdim);
             if (this->requires_grad)
                 output->grad_fn = sum_op;
             return output;
         };
-        std::shared_ptr<tensor<int>> argmax(const int &dim = -1, const bool &keepdim = false)
+        std::shared_ptr<tensor<int>> argmax(const bool flattened = true){//same as tensor::flattened::argmax()
+            return this->argmax(-this->rank()-1); // silly
+        }
+
+        std::shared_ptr<tensor<int>> argmax(int dim = -1, const bool &keepdim = false)
         {
+            CHECK_VALID_RANGE(dim, this->rank(), -this->rank()-1);
             std::vector<size_t> new_dims;
             std::valarray<int> id_data;
-            if (dim == -1)
-                id_data.resize(1);
-            else
-                id_data.resize(this->dims[dim]);
-
-            std::iota(std::begin(id_data), std::end(id_data), 0);
-
+            
             auto data = (*this->d);
-
             auto out_data = new (std::nothrow) std::valarray<int>(1);
             if (out_data == nullptr)
                 throw std::runtime_error("insufficient memory");
 
-            if (dim == -1)
+            if (dim==-this->rank()-1) //flattened input
             {
-                *out_data = id_data[data == data.max()];
+                id_data.resize(this->n_elements());
+                std::iota(std::begin(id_data), std::end(id_data), 0);
+                (*out_data)[0] = std::valarray(id_data[data == data.max()])[0];
                 new_dims = {1};
             }
             else
             {
+                if(dim<0) dim = this->rank() + dim;
+                id_data.resize(this->dims[dim]);
+                std::iota(std::begin(id_data), std::end(id_data), 0);
 
-                std::valarray<size_t> strides, sizes, start_idxs;
-                std::tie(strides, sizes, start_idxs) = generate_idxs(this->shape(), dim);
+                std::valarray<size_t> strides, start_idxs;
+                std::tie(strides, start_idxs) = generate_idxs(this->shape(), dim);
 
                 out_data->resize(start_idxs.size());
                 for (auto i = 0; const auto &idx : start_idxs)
@@ -371,11 +371,11 @@ namespace cyg
                     auto data_slice = std::valarray(data[gslice]);
                     (*out_data)[i++] = std::valarray(id_data[data_slice == data_slice.max()])[0];
                 }
-                new_dims.assign(std::begin(sizes), std::end(sizes));
+                new_dims = this->shape();
+                new_dims[dim]=1;
             }
-
-            auto output = std::make_shared<tensor<int>>(*out_data, new_dims, this->device, false);
-            if (!keepdim && dim != -1)
+            auto output = std::make_shared<tensor<int>>(new_dims, out_data, this->device, false);
+            if (!keepdim && dim != -this->rank()-1)
                 output->squeeze();
             return output;
         };
@@ -383,7 +383,7 @@ namespace cyg
         {
             // number of elements below main diagonal ==
             std::valarray<size_t> idxs;
-            std::tie(std::ignore, std::ignore, idxs) = generate_idxs(this->shape(), this->rank() - 1);
+            std::tie(std::ignore, idxs) = generate_idxs(this->shape(), -1);
             int itr = 1;
             for (int i = 1; i < idxs.size(); ++i)
             {
@@ -395,12 +395,12 @@ namespace cyg
             }
         }; 
         // main diagonal for now i.e diagonal=0;
-        std::shared_ptr<tensor<T>> transpose(int a = 0, int b = 1){
+        std::shared_ptr<tensor<T>> transpose(int d1 = -1, int d2 = -2){
             //col with row
             //cant transponse 1D = asert dims>=2
-            CHECK_TRANSPOSE(this->shape(), a, b);
+            CHECK_TRANSPOSE(this->shape(), d1, d2);
             auto tr_op = std::make_shared<Transpose<tensor<T>>>();
-            auto output = tr_op->forward(this->shared_from_this(), a, b);
+            auto output = tr_op->forward(this->shared_from_this(), d1, d2);
             if(this->requires_grad) output->grad_fn = tr_op;
             return output;
         };
@@ -414,10 +414,11 @@ namespace cyg
         }
 
         void uniform(const float& low, const float& high){ // inplace
-            std::generate(begin((*this->d)), end((*this->d)), [low, high](){ return generate_random(low, high); });
+            std::generate(std::begin((*this->d)), std::end((*this->d)), [low, high](){ return generate_random(low, high); });
         }
-        void repeat(const int& dim, const int& n_repeat){//in place op
-            CHECK_VALID_RANGE(dim, this->rank());
+        void repeat(int dim, const int& n_repeat){//in place op
+            CHECK_VALID_RANGE(dim, this->rank(), -this->rank());
+            if(dim<0) dim = this->rank() + dim;
             this->dims[dim]=n_repeat;
             int n_elements = std::accumulate(this->dims.begin(), this->dims.end(), 1, std::multiplies<int>());
             auto out_data = new (std::nothrow) std::valarray<T>(n_elements);
@@ -430,7 +431,6 @@ namespace cyg
             {
                 (*out_data)[std::slice(id, n_repeat, strides[dim])] = (*this->d)[i];
                 (*grad_data)[std::slice(id, n_repeat, strides[dim])] = (*this->grad)[i++];
-                // (*out_d)[std::slice(id, )]
             }
             delete this->d; //@todo use shared_ptr for d & grad
             delete this->grad;
@@ -465,9 +465,9 @@ namespace cyg
         if (low >= high)
             throw std::runtime_error("pls check input params, the value for the low arg must be lower than the high args");
         auto vec = initialize<float>(dims, 1);
-        std::generate(begin(*vec), end(*vec), [low, high]()
+        std::generate(std::begin(*vec), std::end(*vec), [low, high]()
                       { return generate_random(low, high); });
-        return std::make_shared<tensor<float>>(*vec, dims, device, requires_grad);
+        return std::make_shared<tensor<float>>(dims, vec, device, requires_grad);
     };
 
     /**
@@ -491,6 +491,16 @@ namespace cyg
         out << "), requires_grad = " << std::boolalpha << t.require_grad();
         std::string device = (t.get_device() == Device::cpu) ? "cpu" : "cuda";
         out << ", device = " << device << " )" << "\n";
+        return out;
+    };
+
+    template <class T>
+    std::ostream &operator<<(std::ostream &out, const std::vector<T> input)
+    {
+        out<<"(";
+        for(int i = 0; i< input.size()-1; i++)out<<input[i]<<" , ";
+        out<<input[input.size()-1];
+        out<<")";
         return out;
     };
 
