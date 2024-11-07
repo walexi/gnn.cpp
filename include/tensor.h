@@ -253,31 +253,7 @@ namespace cyg
             auto out = this->pow(t);
             return out;
         }
-        /**
-         * @brief compute the mean along the input dimension for a given tensor
-         * for ex
-         *  auto t = cyg::ones({2,3,4})
-         *  t.mean(2) // mean along the dimension of size 4
-         *
-         * @param dims(type: int)
-         * @param keepdims(type: bool)
-         *
-         * @return tensor (type cyg::tensor)
-         */
-        std::shared_ptr<tensor<T>> mean()
-        {
-            return this->mean(-this->rank()-1);
-        }
-
-        std::shared_ptr<tensor<T>> mean(const int &dim, const bool &keepdims = false)
-        {
-            CHECK_VALID_RANGE(dim, this->rank(), -this->rank()-1);
-            auto mean_op = std::make_shared<Mean<tensor<T>>>();
-            auto output = mean_op->forward(this->shared_from_this(), dims, keepdims);
-            if (this->requires_grad)
-                output->grad_fn = mean_op;
-            return output;
-        };
+        
         /**
          * @brief compute the exponent of a tensor along
          * for ex
@@ -310,6 +286,27 @@ namespace cyg
         };
 
         /**
+         * @brief compute the mean along the input dimension for a given tensor
+         * for ex
+         *  auto t = cyg::ones({2,3,4})
+         *  t.mean(2) // mean along the dimension of size 4
+         *
+         * @param dims(type: int)
+         * @param keepdims(type: bool)
+         *
+         * @return tensor (type cyg::tensor)
+         */
+        std::shared_ptr<tensor<T>> mean(int dim = INT_MAX, const bool& keepdims = false)
+        {
+            CHECK_VALID_RANGE(dim, this->rank(), -this->rank());
+            auto mean_op = std::make_shared<Mean<tensor<T>>>();
+            auto output = mean_op->forward(this->shared_from_this(), dims, keepdims);
+            if (this->requires_grad)
+                output->grad_fn = mean_op;
+            return output;
+        };
+
+        /**
          * @brief compute the sum of each row of the given tensor in the input dimension
          * for ex
          *
@@ -318,27 +315,18 @@ namespace cyg
          *
          * @return tensor (type std::shared_ptr<cyg::tensor>)
          */
-        std::shared_ptr<tensor<T>> sum()
+        std::shared_ptr<tensor<T>> sum(int dim = INT_MAX, const bool& keepdim = false)
         {
-            return this->sum(-this->rank()-1);
-        }
-
-        std::shared_ptr<tensor<T>> sum(const int &dim, const bool &keepdim = false)
-        {
-            CHECK_VALID_RANGE(dim, this->rank(), -this->rank()-1);
+            CHECK_VALID_RANGE(dim, this->rank(), -this->rank());
             auto sum_op = std::make_shared<Sum<tensor<T>>>();
             auto output = sum_op->forward(this->shared_from_this(), dim, keepdim);
             if (this->requires_grad)
                 output->grad_fn = sum_op;
             return output;
         };
-        std::shared_ptr<tensor<int>> argmax(const bool flattened = true){//same as tensor::flattened::argmax()
-            return this->argmax(-this->rank()-1); // silly
-        }
-
-        std::shared_ptr<tensor<int>> argmax(int dim = -1, const bool &keepdim = false)
+        std::shared_ptr<tensor<int>> argmax(int dim = INT_MAX, const bool& keepdim = false)
         {
-            CHECK_VALID_RANGE(dim, this->rank(), -this->rank()-1);
+            CHECK_VALID_RANGE(dim, this->rank(), -this->rank());
             std::vector<size_t> new_dims;
             std::valarray<int> id_data;
             
@@ -347,7 +335,7 @@ namespace cyg
             if (out_data == nullptr)
                 throw std::runtime_error("insufficient memory");
 
-            if (dim==-this->rank()-1) //flattened input
+            if (dim==INT_MAX) //flattened input
             {
                 id_data.resize(this->n_elements());
                 std::iota(std::begin(id_data), std::end(id_data), 0);
@@ -373,7 +361,7 @@ namespace cyg
                 new_dims[dim]=1;
             }
             auto output = std::make_shared<tensor<int>>(new_dims, out_data, this->device, false);
-            if (!keepdim && dim != -this->rank()-1)
+            if (!keepdim && dim != INT_MAX)
                 output->squeeze();
             return output;
         };
@@ -402,11 +390,8 @@ namespace cyg
             return output;
         };
 
-        std::shared_ptr<tensor<T>> var(){
-            return this->var(-this->rank()-1);
-        }
-        std::shared_ptr<tensor<T>> var(const int& dim=-1, const bool& keepdim=true){
-            CHECK_VALID_RANGE(dim, this->rank(), -this->rank()-1);
+        std::shared_ptr<tensor<T>> var(int dim= INT_MAX, const bool& keepdim=true){
+            CHECK_VALID_RANGE(dim, this->rank(), -this->rank());
             auto var_op = std::make_shared<Var<tensor<T>>>();
             auto output = var_op->forward(this->shared_from_this(), dim, keepdim);
             if(this->requires_grad) output->grad_fn = var_op;
