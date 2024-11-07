@@ -29,6 +29,7 @@ const char ERROR_MM_COMPATIBLE[] = "tensors are not compatible, tensors should o
 const char ERROR_OUT_OF_BOUND_DIM[] = "dim is out of range";
 const char ERROR_GRAD_MISMATCH[] = "size mismatch, incoming gradient must be same dimension with tensor";
 const char ERROR_TRANSPOSE[] = "invalid inp";
+
 std::default_random_engine e(std::time(nullptr));
 
 /**
@@ -301,8 +302,8 @@ inline void CHECK_MM_DIMS(std::vector<size_t> ldims, std::vector<size_t> rdims)
  */
 inline void CHECK_VALID_RANGE(const int &dim, const int &rank, const int &low = 0)
 {
-    assertm(low <= dim < rank, ERROR_OUT_OF_BOUND_DIM);
-    if (dim >= rank || dim < low)
+    assertm(dim==INT_MAX || low <= dim < rank, ERROR_OUT_OF_BOUND_DIM);
+    if (dim!=INT_MAX && (dim >= rank || dim < low))
         throw std::runtime_error(ERROR_OUT_OF_BOUND_DIM);
 }
 #endif
