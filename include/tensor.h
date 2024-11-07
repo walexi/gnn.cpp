@@ -131,16 +131,15 @@ namespace cyg
             // assertm(this->requires_grad, "please enable requires_grad on tensor to backprop");
             if (incoming_gradient == nullptr && this->n_elements() != 1)
                 throw std::runtime_error(ERROR_NON_SCALAR_BACKPROP);
-            // 2 scenarios
-            // incoming grad, prolly no mistmatch
-            // scalar
+
+            if (incoming_gradient == nullptr)
+                incoming_gradient = new tensor<T>(this->dims, 1); // scalar, size=1
             if (incoming_gradient->n_elements() != this->n_elements())
                 throw std::runtime_error(ERROR_GRAD_MISMATCH);
-            if (incoming_gradient == nullptr)
-                incoming_gradient = std::make_shared<tensor<T>>(this->dims, 1).get(); // scalar, size=1
-            if (this->grad != nullptr)
-                *this->grad += *incoming_gradient->data();
 
+            if (this->grad != nullptr){
+                *this->grad += *incoming_gradient->data();
+            }
             if (this->grad_fn != nullptr)
                 this->grad_fn->backward(incoming_gradient);
         };
@@ -361,8 +360,7 @@ namespace cyg
                 id_data.resize(this->dims[dim]);
                 std::iota(std::begin(id_data), std::end(id_data), 0);
 
-                std::valarray<size_t> strides, start_idxs;
-                std::tie(strides, start_idxs) = generate_idxs(this->shape(), dim);
+                const auto [strides, start_idxs] = generate_idxs(this->shape(), dim);
 
                 out_data->resize(start_idxs.size());
                 for (auto i = 0; const auto &idx : start_idxs)
@@ -382,8 +380,7 @@ namespace cyg
         void triu()//inplace op
         {
             // number of elements below main diagonal ==
-            std::valarray<size_t> idxs;
-            std::tie(std::ignore, idxs) = generate_idxs(this->shape(), -1);
+            const auto [_, idxs] = generate_idxs(this->shape(), -1);
             int itr = 1;
             for (int i = 1; i < idxs.size(); ++i)
             {
@@ -405,8 +402,11 @@ namespace cyg
             return output;
         };
 
+        std::shared_ptr<tensor<T>> var(){
+            return this->var(-this->rank()-1);
+        }
         std::shared_ptr<tensor<T>> var(const int& dim=-1, const bool& keepdim=true){
-            CHECK_VALID_RANGE(dim, this->rank(), -1);
+            CHECK_VALID_RANGE(dim, this->rank(), -this->rank()-1);
             auto var_op = std::make_shared<Var<tensor<T>>>();
             auto output = var_op->forward(this->shared_from_this(), dim, keepdim);
             if(this->requires_grad) output->grad_fn = var_op;
@@ -424,8 +424,7 @@ namespace cyg
             auto out_data = new (std::nothrow) std::valarray<T>(n_elements);
             auto grad_data = new (std::nothrow) std::valarray<float>(n_elements);
             if(grad_data==nullptr || out_data==nullptr) throw std::runtime_error("insufficient memory");
-            std::valarray<size_t> strides, idxs;
-            std::tie(strides, idxs) = generate_idxs(this->dims, dim);
+            const auto [strides, idxs] = generate_idxs(this->dims, dim);
 
             for(int i=0; const auto& id:idxs)
             {

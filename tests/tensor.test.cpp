@@ -1,63 +1,122 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#define NDEBUG
+#include <cassert>
+
 #include "doctest.h"
 #include "tensor.h"
+#include "utils.h"
 #include <memory>
-#include <vector>
+#include <valarray>
 #include <numeric>
 
 using namespace std;
 using namespace cyg;
 
-const size_t n_elements = 6;
-vector<int> dims = {2, 3};
-vector<float> zeros_vec(n_elements, 0);
-vector<float> ones_vec(n_elements, 1);
-vector<float> ones_vec9(n_elements+3, 1);
-auto t_ones = cyg::ones(dims, Device::cpu, true);
-auto t_zeros = cyg::ones(dims, Device::cpu, true);
-auto t_rand =cyg::randn(dims);
-auto vec = initialize(dims, 3);
-auto vec2 = initialize(dims, 5);
-auto t_vec = make_shared<tensor>(*vec, dims, Device::cpu, true);
-auto t_vec2 = make_shared<tensor>(*vec2, dims, Device::cpu, true);
+const float tol = 1e-20;
+const auto compare = [](float a){ return bool(fabs(a)<=tol);};
 
-// @todo write tests for all the added ops
-TEST_CASE("testing cyg::ones")
+
+TEST_CASE("testing tensor")
 {
-    auto d = *t_vec->data();
-    cout << "check tensor data" << "\n";
-    CHECK(equal(d.cbegin(), d.cend(), vec->cbegin()));
-    auto s = t_vec->n_elements();
-    cout << "check tensor num of elements" << "\n";
-    CHECK(s == n_elements);
-    cout << "check tensor size" << "\n";
-    CHECK(equal(dims.cbegin(), dims.cend(), t_vec->shape().cbegin()));
-    cout << "check tensor rank" << "\n";
-    CHECK(t_vec->rank() == dims.size());
-    // cout<<*t_vec<<endl;
-    cout<< "check tensor grad"<<"\n";
-    t_ones->enable_grad(false);
-    CHECK(t_ones->get_grad()==nullptr);
-    t_ones->enable_grad(true);
-    auto grad = *t_ones->get_grad();
-    CHECK(equal(grad.cbegin(),grad.cend(), zeros_vec.begin()));
+    cout<<"testing tensor initialization"<<endl;
+    vector<size_t> dims = {3, 6,9};
+    auto arr1 = initialize<float>(dims, 3);
+    auto arr2 = initialize<float>(dims, 5);
+    auto zeros_arr = initialize<float>(dims, 0);
+    auto arr_int = initialize<int>(dims, 3);
+    
+    CHECK_THROWS_WITH_AS(tensor<int>(dims, arr_int, Device::cpu, true), ERROR_GRAD_DTYPE, std::runtime_error); // setting grad on non-float dypes tensors
+    
+    auto t1 = make_shared<tensor<float>>(dims, arr1, Device::cpu, true);
+    valarray<float> diff1 = *t1->data() - *arr2;
+    CHECK_FALSE(all_of(begin(diff1), end(diff1), compare)); //check data
+    
+    valarray<float> diff2 = *t1->data() - *arr1;
+    CHECK(all_of(begin(diff2), end(diff2), compare));
+    
+    vector<size_t> dims2 = {10,20};
+    CHECK_THROWS_WITH_AS(tensor<float>(dims2, arr1, Device::cpu, false), ERROR_SIZE_MISMATCH, std::runtime_error); //check sizemismatch
+
+    cout<<"testing tensor grad"<<endl;
+    t1->enable_grad(true);
+    valarray<float> diff3 = *t1->get_grad() - *zeros_arr;
+    CHECK(all_of(begin(diff3), end(diff3), compare));
+    t1->enable_grad(false);
+    CHECK(t1->get_grad()==nullptr);
+    cout<<"testing squeeze and unsqueeze ops"<<endl;
+    vector<size_t> dims3 = {1,1,1,2,3,4};
+    auto t2 = make_shared<tensor<float>>(dims3, 1);
+    t2->squeeze();
+    vector<size_t> dims33 = {2,3,4};
+    auto s = t2->shape();
+    CHECK(t2->shape() == dims33);
+    t2->unsqueeze(2);
+    vector<size_t> dims4 = {2,3,1,4};    
+    CHECK(t2->shape() == dims4);
+    t2->squeeze();
+    t2->unsqueeze(-2);
+    CHECK(t2->shape() == dims4);
+    CHECK_THROWS_AS(t2->unsqueeze(5), std::runtime_error);
+    
+
     cout << "check indexing operator" << "\n";
-    CHECK((*t_ones)(0,0) != 2);
-    CHECK((*t_ones)(0, 0) == 1);
-    CHECK_THROWS((*t_ones)(0, 14));
-    CHECK_THROWS((*t_ones)(12, 0));
-    t_rand->enable_grad(true);
-    // cout<<"randn \n" <<*t_rand<<endl;
-    cout<<"testing backprop - Add"<<endl;
-    auto t_new1 = t_ones / t_zeros;
-    auto t_new = t_new1 / t_zeros;
-    cout<<"randn+ones \n"<<*t_new<<endl;
-    t_new->backward(initialize(dims, 1));
-    for(auto j: *t_ones->get_grad()) cout<<j<<"\t";
-    cout<<endl;
-    for(auto j: *t_zeros->get_grad()) cout<<j<<"\t";
-    cout<<endl;
-    // cout<<*t_new<<endl;
+    t2->squeeze(); //{2,3,4}
+    CHECK_THROWS_AS((*t2)(1,2,10), std::runtime_error);
+    CHECK((*t2)(0, 0, 0) == (*t2->data())[0]);
+
+    cout<< "addding tensors"<<"\n";
+    t1->enable_grad(true);
+    CHECK_THROWS_WITH_AS(t1 += 3, ERROR_IN_PLACE_OP_LEAF, std::runtime_error);
+
+    vector<size_t> dims9 = {8, 2,4,3};
+
+    auto dd3 = cyg::randn({8,2,4,3});
+    dd3->triu();
+    auto r  = dd3->argmax(-5);
+    // auto dd_transposed = dd3->transpose(-1, -2);
+    t2->enable_grad(true);
+    dd3->enable_grad(true);
+    auto dd4 = t2->mm(dd3);
+    // auto dd5 = dd4->sum();
+    dd4->backward(ones_like(dd4).get());
+    // cout<<*dd4<<endl;
+    // t1->unsqueeze(0);
+    // // t1 * float(2);
+    // CHECK_THROWS_WITH_AS(t1+=t2, ERROR_SIZE_MISMATCH, std::runtime_error);
+    // auto t3 = cyg::randn(t2->shape(), -1, 1, Device::cpu, true);
+    // CHECK_THROWS_WITH_AS(t3+=t2, ERROR_IN_PLACE_OP_LEAF, std::runtime_error);
+    
+//     // cout<<"output here\n";
+// //     cout<<*l<<endl;
+// //     auto d = *t_vec->data();
+// //     cout << "check tensor data" << "\n";
+// //     CHECK(equal(d.cbegin(), d.cend(), vec->cbegin()));
+// //     auto s = t_vec->n_elements();
+// //     cout << "check tensor num of elements" << "\n";
+// //     CHECK(s == n_elements);
+// //     cout << "check tensor size" << "\n";
+// //     CHECK(equal(dims.cbegin(), dims.cend(), t_vec->shape().cbegin()));
+// //     cout << "check tensor rank" << "\n";
+// //     CHECK(t_vec->rank() == dims.size());
+// //     // cout<<*t_vec<<endl;
+// //     
+// //     cout<< "check mean"<<endl;
+// //     cout<<*t_rand<<endl;
+// //     cout<< "check mean"<<endl;
+// //     // sth is wrong here @todo fix 
+// //     cout<<*t_rand->mean(1, true)<<endl;
+//     // cout<<"randn \n" <<*t_rand<<endl;
+//     // cout<<"testing backprop - Add"<<endl;
+//     // t_rand->enable_grad(true);
+//     // auto t_new1 = t_ones / t_zeros;
+    // auto t_new = t_new1 / t_zeros;
+    // cout<<"randn+ones \n"<<*t_new<<endl;
+    // t_new->backward(initialize(dims, 1));
+    // for(auto j: *t_ones->get_grad()) cout<<j<<"\t";
+    // cout<<endl;
+    // for(auto j: *t_zeros->get_grad()) cout<<j<<"\t";
+    // cout<<endl;
+    // // cout<<*t_new<<endl;
     // for(auto j: *t_zeros->get_grad()) cout<<j<<"\t";
     // for(auto j: *t_rand->get_grad()) cout<<j<<"\t";
     // cout<<endl;

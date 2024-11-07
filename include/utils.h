@@ -40,7 +40,7 @@ std::default_random_engine e(std::time(nullptr));
  *
  * @return random number(type float)
  */
-float generate_random(int low, int high)
+float generate_random(const float& low, const float& high)
 {
     std::uniform_real_distribution<float> u(low, high);
     return u(e);
@@ -81,24 +81,128 @@ auto get_index(std::vector<std::size_t> *t_dims, std::vector<std::size_t> dims)
     return index;
 };
 
+
 /**
- * @brief resize to t1
+ * @author olawale onabola
+ * @brief generate start ids along a dimension
+ * for ex
+ * given a 5x4 matrix
+ *           [ 1,  2,  3, 4  ]
+ *           [ 5,  6,  7, 8  ]
+ *           [ 9, 10, 11, 12 ]
+ *           [ 13,14, 15, 16 ]
+ *           [ 17,18, 19, 20 ]
+ * 
+ * start ids along the row, i.e 5, has 5 elements and are = 1, 5, 9, 13, 17
+ * 
+ * start ids along the col i.e 4, has 4 elements and are = 1, 2, 3, 4
+ * 
+ * and this can be extended to more than 2D, N1xN2xN3x..xN,  N dimensions 
+ * 
+ * for 2x5x4
+ *           [[[ 1,   2,  3, 4  ]
+*              [ 5,   6,  7, 8  ]
+ *             [ 9,  10, 11, 12 ]
+ *             [ 13, 14, 15, 16 ]
+ *             [ 17, 18, 19, 20 ]]
+ *             
+ *            [[ 21, 22, 23, 24 ]
+ *             [ 25, 26, 27, 28 ]
+ *             [ 29, 30, 31, 32 ]
+ *             [ 33, 34, 35, 36 ]
+ *             [ 37, 38, 39, 40 ]]]
+ * 
+ * start ids across the col, i.e 4, has 2*5 elements and are = 1, 5, 9, 13, 17, 21, 25, 29, 33, 37
+ * start ids across the row i.e 5, has 2*4 elements and are = 1, 2, 3, 4, 21, 22, 23, 24
+ * start ids across the batch, i.e 2 has 5*4 elements and are =  1,2,3,4,5,6,7,8,9,....,19,20
  */
-void resize(const int t1_size, std::valarray<float> *t2, const int &value = 1)
+
+inline std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>> generate_idxs(const std::vector<std::size_t> tdims, int dim)
 {
-    // References become invalid on resize() or when the array is destructed.
-    if (t1_size > t2->size())
-        t2->resize(t1_size - t2->size(), value);
-    // else
+    if(dim<0) dim = tdims.size()+dim;
+    std::valarray<std::size_t> strides(tdims.size());
+    int n_elements = std::accumulate(tdims.cbegin(), tdims.cend(), 1, std::multiplies<int>());
+    std::size_t s = 1;
+    for (int i = tdims.size() - 1; i >= 0; --i)
+    {
+        strides[i] = s;
+        s *= tdims[i];
+    }
+    std::valarray<std::size_t> sizes(tdims.data(), tdims.size());
+    sizes[dim] = 1;
+    std::valarray<std::size_t> id_data(n_elements);
+    std::iota(std::begin(id_data), std::end(id_data), 0);
+    const std::valarray<std::size_t> idxs = id_data[std::gslice(0, sizes, strides)];
+
+    return {strides, idxs};
 }
 
 /**
- * 
+ * @brief create a formatted string rep of an ND vector with the given dims
+ *
+ * @param nd_data(type std::valarray<float>)
+ * @param shape(type std::vector<int>)
+ *
+ * @return stringstream object(type std::stringstream)
+ */
+template <class T>
+std::stringstream printND(std::valarray<T> nd_data, std::vector<std::size_t> shape)
+{
+    int n_elements = nd_data.size();
+    std::stringstream out;
+    out.setf(std::numeric_limits<T>::digits10);
+    std::string dl(shape.size(), '[');
+    out << dl;
+    auto [strides, idxs] = generate_idxs(shape, shape.size() - 1);
+    strides[shape.size() - 1] = strides[0] * shape[0];
+    auto MAX_WIDTH = std::to_string(nd_data.max()).length();
+    for (auto i = 0; auto idx : idxs)
+    {
+        if (i != n_elements && i != 0)
+        {
+            auto count = std::count_if(std::begin(strides), std::end(strides), [=](int s)
+                                       { return idx % s == 0; });
+            std::string ddl(count, ']'), sp(count, '\n'), dfl(count, '[');
+            out << ddl << "," << sp;
+            out.width(shape.size() + 1);
+            out << dfl;
+        }
+        std::valarray<T> sl = nd_data[std::slice(idx, shape[shape.size() - 1], 1)];
+        out.width(MAX_WIDTH - 1);
+        out << std::setprecision(4) << std::right << sl[0];
+        std::for_each(std::begin(sl) + 1, std::end(sl), [&](T n)
+                      { 
+            out<<",";
+            out.width(MAX_WIDTH+1);
+            out<<std::setprecision(4)<<std::right<<n; });
+        out << " ";
+        i++;
+    }
+    std::string ddl(shape.size(), ']');
+    out << ddl;
+
+    return out;
+};
+template<class T>
+void CHECK_DEVICE(const std::shared_ptr<T>& lhs, const std::shared_ptr<T>& rhs)
+{
+    assertm(lhs->get_device() == rhs->get_device(), "tensors are on different devices");
+    if (lhs->get_device() != rhs->get_device())
+        throw std::runtime_error("tensors are on different devices");
+};
+template<class T>
+void CHECK_BACKWARD(const std::vector<std::shared_ptr<T>>& var, int expected=1){
+    std::string err_msg = "cant backprop without executing a forward computation first";
+    assertm(var.size() != expected, err_msg);
+    if (var.size() != expected)
+        throw std::runtime_error(err_msg);
+};
+/**
  * 
  */
 inline void CHECK_TRANSPOSE(std::vector<size_t> s, int a, int b)
 {
-    const bool isValid = (0<=a<s.size()) && (0<=b<s.size()) && (std::abs(a-b)==1);
+    const bool isValid = (-s.size()<=a<s.size()) && (-s.size()<=b<s.size()) && (std::abs(a-b)==1);
     assertm(isValid, ERROR_TRANSPOSE);
     if(!isValid) throw std::runtime_error(ERROR_TRANSPOSE);
 }
@@ -183,17 +287,10 @@ inline void CHECK_MM_DIMS(std::vector<size_t> ldims, std::vector<size_t> rdims)
 {
     std::iter_swap(ldims.rbegin(), ldims.rbegin()+1);
     int min_d = std::min(rdims.size(), ldims.size());
-    bool isValid = std::equal(rdims.rbegin(), rdims.rbegin()+min_d, ldims.rbegin(), ldims.rbegin()+min_d);
+    bool isValid = std::equal(rdims.rbegin()+1, rdims.rbegin()+min_d, ldims.rbegin()+1, ldims.rbegin()+min_d);
     assertm(isValid, ERROR_MM_COMPATIBLE);
     if (!isValid)
         throw std::runtime_error(ERROR_MM_COMPATIBLE);
-}
-
-inline void CHECK_NO_BROADCAST(std::vector<size_t> ldims, std::vector<size_t> rdims)
-{
-    bool isValid = ldims.size()>=rdims.size();
-    assertm(isValid, "The rank of the lhs tensor must be equal to or more than the rhs tensor");
-    if(!isValid) throw std::runtime_error("The rank of the lhs tensor must be equal to or more than the rhs tensor");
 }
 
 /**
@@ -207,107 +304,5 @@ inline void CHECK_VALID_RANGE(const int &dim, const int &rank, const int &low = 
     assertm(low <= dim < rank, ERROR_OUT_OF_BOUND_DIM);
     if (dim >= rank || dim < low)
         throw std::runtime_error(ERROR_OUT_OF_BOUND_DIM);
-}
-
-/**
- * @author olawale onabola
- * @brief generate start ids along a dimension
- * for ex
- * given a 5x4 matrix
- *           [ 1,  2,  3, 4  ]
- *           [ 5,  6,  7, 8  ]
- *           [ 9, 10, 11, 12 ]
- *           [ 13,14, 15, 16 ]
- *           [ 17,18, 19, 20 ]
- * 
- * start ids along the row, i.e 5, has 5 elements and are = 1, 5, 9, 13, 17
- * 
- * start ids along the col i.e 4, has 4 elements and are = 1, 2, 3, 4
- * 
- * and this can be extended to more than 2D, N1xN2xN3x..xN,  N dimensions 
- * 
- * for 2x5x4
- *           [[[ 1,   2,  3, 4  ]
-*              [ 5,   6,  7, 8  ]
- *             [ 9,  10, 11, 12 ]
- *             [ 13, 14, 15, 16 ]
- *             [ 17, 18, 19, 20 ]]
- *             
- *            [[ 21, 22, 23, 24 ]
- *             [ 25, 26, 27, 28 ]
- *             [ 29, 30, 31, 32 ]
- *             [ 33, 34, 35, 36 ]
- *             [ 37, 38, 39, 40 ]]]
- * 
- * start ids across the col, i.e 4, has 2*5 elements and are = 1, 5, 9, 13, 17, 21, 25, 29, 33, 37
- * start ids across the row i.e 5, has 2*4 elements and are = 1, 2, 3, 4, 21, 22, 23, 24
- * start ids across the batch, i.e 2 has 5*4 elements and are =  1,2,3,4,5,6,7,8,9,....,19,20
- */
-
-inline std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>, std::valarray<std::size_t>> generate_idxs(const std::vector<std::size_t> tdims, const int &dim)
-{
-    std::valarray<std::size_t> strides(tdims.size());
-    int n_elements = std::accumulate(tdims.cbegin(), tdims.cend(), 1, std::multiplies<int>());
-    std::size_t s = 1;
-    for (int i = tdims.size() - 1; i >= 0; --i)
-    {
-        strides[i] = s;
-        s *= tdims[i];
-    }
-    std::valarray<std::size_t> sizes(tdims.data(), tdims.size());
-    sizes[dim] = 1;
-    std::valarray<std::size_t> id_data(n_elements);
-    std::iota(std::begin(id_data), std::end(id_data), 0);
-    const std::valarray<std::size_t> idxs = id_data[std::gslice(0, sizes, strides)];
-
-    return {strides, sizes, idxs};
-}
-
-/**
- * @brief create a formatted string rep of an ND vector with the given dims
- *
- * @param nd_data(type std::valarray<float>)
- * @param shape(type std::vector<int>)
- *
- * @return stringstream object(type std::stringstream)
- */
-template <class T>
-std::stringstream printND(std::valarray<T> nd_data, std::vector<std::size_t> shape)
-{
-    int n_elements = nd_data.size();
-    std::stringstream out;
-    out.setf(std::numeric_limits<T>::digits10);
-    std::string dl(shape.size(), '[');
-    out << dl;
-    std::valarray<size_t> strides, sizes, idxs;
-    std::tie(strides, sizes, idxs) = generate_idxs(shape, shape.size() - 1);
-    strides[shape.size() - 1] = strides[0] * shape[0];
-    auto MAX_WIDTH = std::to_string(nd_data.max()).length();
-    for (auto i = 1; auto idx : idxs)
-    {
-        if (i != n_elements && i != 1)
-        {
-            auto count = std::count_if(std::begin(strides), std::end(strides), [=](int s)
-                                       { return idx % s == 0; });
-            std::string ddl(count, ']'), sp(count, '\n'), dfl(count, '[');
-            out << ddl << "," << sp;
-            out.width(shape.size() + 1);
-            out << dfl;
-        }
-        std::valarray<T> sl = nd_data[std::slice(idx, shape[shape.size() - 1], 1)];
-        out.width(MAX_WIDTH - 1);
-        out << std::setprecision(4) << std::right << sl[0];
-        std::for_each(std::begin(sl) + 1, std::end(sl), [&](T n)
-                      { 
-            out<<",";
-            out.width(MAX_WIDTH+1);
-            out<<std::setprecision(4)<<std::right<<n; });
-        out << " ";
-        i++;
-    }
-    std::string ddl(shape.size(), ']');
-    out << ddl;
-
-    return out;
 }
 #endif

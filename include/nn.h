@@ -44,7 +44,7 @@ namespace nn
         virtual void train(const bool &isTrain)
         {
             for (auto &p : params) p.second->enable_grad(isTrain);
-            for (auto &m : modules) m.second->train(isTrain);
+            for (auto &m : modules) m.second->train(isTrain);//recursive
             isTraining = isTrain;
         };
         virtual std::shared_ptr<cyg::tensor<float>> operator()(const std::shared_ptr<cyg::tensor<float>> &input_tensor) { return this->forward(input_tensor); }; // you prolly dont wanna pass in a tensor without grad enabled
