@@ -454,8 +454,9 @@ namespace cyg
             this->dims[dim] = n_repeat;
             int n_elements = std::accumulate(this->dims.begin(), this->dims.end(), 1, std::multiplies<int>());
             auto out_data = new (std::nothrow) std::valarray<T>(n_elements);
-            std::valarray<float>* grad_data;
-            if(this->requires_grad) grad_data = new (std::nothrow) std::valarray<float>(n_elements);
+            std::valarray<float> *grad_data;
+            if (this->requires_grad)
+                grad_data = new (std::nothrow) std::valarray<float>(n_elements);
             if (out_data == nullptr)
                 throw std::runtime_error("insufficient memory");
             const auto [strides, idxs] = generate_idxs(this->dims, dim);
@@ -463,11 +464,14 @@ namespace cyg
             for (int i = 0; const auto &id : idxs)
             {
                 (*out_data)[std::slice(id, n_repeat, strides[dim])] = (*this->d)[i];
-                if(this->requires_grad) (*grad_data)[std::slice(id, n_repeat, strides[dim])] = (*this->grad)[i++];
+                if (this->requires_grad)
+                    (*grad_data)[std::slice(id, n_repeat, strides[dim])] = (*this->grad)[i++];
             }
             delete this->d; //@todo use shared_ptr for d & grad
             this->d = out_data;
-            if(this->requires_grad) delete this->grad; this->grad = grad_data;
+            if (this->requires_grad)
+                delete this->grad;
+            this->grad = grad_data;
         }
 
         // tensor(tensor&& other);
@@ -522,7 +526,7 @@ namespace cyg
         out << output_string.str() << ", size = ( ";
         for (const auto &r : t.shape())
             out << r << " ";
-        out << "), requires_grad = " << std::boolalpha << t.require_grad()<< " )" << "\n";
+        out << "), requires_grad = " << std::boolalpha << t.require_grad() << " )" << "\n";
         return out;
     };
 
