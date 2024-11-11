@@ -13,7 +13,8 @@
 #include <assert.h>
 #include <sstream>
 #include <type_traits>
-// Use (void) to silence unused warnings.
+
+// TODO integrate cuda - thrust - focus on tensor.d and tensor.grad
 
 namespace cyg
 {
@@ -21,13 +22,6 @@ namespace cyg
     template <class T>
     class tensor : public std::enable_shared_from_this<tensor<T>>
     {
-    private:
-        std::valarray<T> *d = nullptr;
-        //@todo use smart ptr for d and grad
-        std::vector<size_t> dims;
-        std::valarray<float> *grad = nullptr;
-        bool requires_grad;
-
     public:
         typedef T value_type;
         std::shared_ptr<Operation<tensor<T>>> grad_fn;
@@ -170,8 +164,7 @@ namespace cyg
          */
         std::shared_ptr<tensor<T>> add(const std::shared_ptr<tensor<T>> other)
         {
-            CHECK_RANK(other->shape(), this->shape());
-            CHECK_SIZE(other->shape(), this->n_elements());
+            CHECK_ARGS_OPS(this->shape(), other->shape());
             BROADCAST(this, other.get());
             auto add_op = std::make_shared<cyg::Add<tensor<T>>>();
             auto output = add_op->forward(this->shared_from_this(), other);
@@ -187,8 +180,7 @@ namespace cyg
          */
         std::shared_ptr<tensor<T>> mul(const std::shared_ptr<tensor<T>> other)
         {
-            CHECK_RANK(other->shape(), this->shape());
-            CHECK_SIZE(other->shape(), this->n_elements());
+            CHECK_ARGS_OPS(this->shape(), other->shape());
             BROADCAST(this, other.get());
             auto mul_op = std::make_shared<Mul<tensor<T>>>();
             auto output = mul_op->forward(this->shared_from_this(), other);
@@ -215,8 +207,7 @@ namespace cyg
          */
         std::shared_ptr<tensor<T>> div(const std::shared_ptr<tensor<T>> other)
         {
-            CHECK_RANK(other->shape(), this->shape());
-            CHECK_SIZE(other->shape(), this->n_elements());
+            CHECK_ARGS_OPS(this->shape(), other->shape());
             BROADCAST(this, other.get());
             auto div_op = std::make_shared<Div<tensor<T>>>();
             auto output = div_op->forward(this->shared_from_this(), other);
@@ -232,8 +223,7 @@ namespace cyg
          */
         std::shared_ptr<tensor<T>> pow(const std::shared_ptr<tensor<T>> exponent, const bool &inplace = false)
         {
-            CHECK_RANK(exponent->shape(), this->shape());
-            CHECK_SIZE(exponent->shape(), this->n_elements());
+            CHECK_ARGS_OPS(this->shape(), exponent->shape());
             BROADCAST(this, exponent.get());
             auto pow_op = std::make_shared<Pow<tensor<T>>>();
             auto output = pow_op->forward(this->shared_from_this(), exponent);
@@ -464,20 +454,20 @@ namespace cyg
             this->dims[dim] = n_repeat;
             int n_elements = std::accumulate(this->dims.begin(), this->dims.end(), 1, std::multiplies<int>());
             auto out_data = new (std::nothrow) std::valarray<T>(n_elements);
-            auto grad_data = new (std::nothrow) std::valarray<float>(n_elements);
-            if (grad_data == nullptr || out_data == nullptr)
+            std::valarray<float>* grad_data;
+            if(this->requires_grad) grad_data = new (std::nothrow) std::valarray<float>(n_elements);
+            if (out_data == nullptr)
                 throw std::runtime_error("insufficient memory");
             const auto [strides, idxs] = generate_idxs(this->dims, dim);
 
             for (int i = 0; const auto &id : idxs)
             {
                 (*out_data)[std::slice(id, n_repeat, strides[dim])] = (*this->d)[i];
-                (*grad_data)[std::slice(id, n_repeat, strides[dim])] = (*this->grad)[i++];
+                if(this->requires_grad) (*grad_data)[std::slice(id, n_repeat, strides[dim])] = (*this->grad)[i++];
             }
             delete this->d; //@todo use shared_ptr for d & grad
-            delete this->grad;
             this->d = out_data;
-            this->grad = grad_data;
+            if(this->requires_grad) delete this->grad; this->grad = grad_data;
         }
 
         // tensor(tensor&& other);
@@ -485,6 +475,12 @@ namespace cyg
         // disable copy constructor and copy assigment operator
         // tensor(const tensor&);
         // tensor& operator=(const tensor&);
+
+        std::valarray<T> *d = nullptr;
+        //@todo use smart ptr for d and grad
+        std::vector<size_t> dims;
+        std::valarray<float> *grad = nullptr;
+        bool requires_grad;
     };
 
     /**
@@ -514,7 +510,6 @@ namespace cyg
      *
      * @param out(type std::ostream)
      * @param input_tensor(type cyg::tensor)
-     *
      * @return output_stream(type std::ostream)
      */
     template <class T>
@@ -548,7 +543,6 @@ namespace cyg
      *
      * @param input_tensor(type std::shared_ptr<tensor>)
      * @param requires_grad(type bool)
-     *
      * @return generated tensor(type std::shared_ptr<tensor>)
      */
     template <class T>
@@ -562,7 +556,6 @@ namespace cyg
      *
      * @param input_tensor(type std::shared_ptr<tensor>)
      * @param requires_grad(type bool)
-     *
      * @return generated tensor(type std::shared_ptr<tensor>)
      */
     template <class T>
