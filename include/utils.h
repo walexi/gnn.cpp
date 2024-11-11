@@ -16,6 +16,7 @@
 
 // Use (void) to silence unused warnings.
 #define assertm(exp, msg) assert(((void)msg, exp));
+
 // error messages
 const char ERROR_GRAD_DTYPE[] = "Only Tensors of floating point dtype can require gradients";
 const char WARNING_GRAD_NOT_LEAF[] = "UserWarning: The .grad attribute of a Tensor that is not a leaf Tensor is being accessed. Its .grad attribute won\'t be populated during autograd.backward()";
@@ -32,6 +33,22 @@ const char ERROR_TRANSPOSE[] = "invalid inp";
 
 std::default_random_engine e(std::time(nullptr));
 
+
+// https://numpy.org/doc/stable/user/basics.broadcasting.html
+// https://pytorch.org/docs/stable/notes/broadcasting.html
+template<class T>
+void BROADCAST(T* lhs, T* rhs)
+{
+    for(int i=-1; i>=-std::max(lhs->rank(), rhs->rank()); i--){
+
+        if(std::abs(i)>lhs->rank()) lhs->unsqueeze(0);
+        if(std::abs(i)>rhs->rank()) rhs->unsqueeze(0);
+        if(std::min(lhs->shape()[lhs->rank() + i], rhs->shape()[rhs->rank()+i])==1 && lhs->shape()[lhs->rank()+i] != rhs->shape()[rhs->rank()+ i]){
+            auto m = std::max(lhs->shape()[lhs->rank() + i], rhs->shape()[rhs->rank() + i]);
+            (lhs->shape()[lhs->rank() + i]==1) ? lhs->repeat(i, m) : rhs->repeat(i, m);
+        }
+    }
+}
 /**
  * @brief generate a floating-point number from a uniform dist in the range [low, high)
  * pdf = 1/(high-low)
@@ -84,7 +101,6 @@ auto get_index(std::vector<std::size_t> *t_dims, std::vector<std::size_t> dims)
 
 
 /**
- * @author olawale onabola
  * @brief generate start ids along a dimension
  * for ex
  * given a 5x4 matrix
@@ -122,13 +138,13 @@ inline std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>> genera
 {
     if(dim<0) dim = tdims.size()+dim;
     std::valarray<std::size_t> strides(tdims.size());
-    int n_elements = std::accumulate(tdims.cbegin(), tdims.cend(), 1, std::multiplies<int>());
     std::size_t s = 1;
     for (int i = tdims.size() - 1; i >= 0; --i)
     {
         strides[i] = s;
         s *= tdims[i];
     }
+    int n_elements = strides[0]*tdims[0];
     std::valarray<std::size_t> sizes(tdims.data(), tdims.size());
     sizes[dim] = 1;
     std::valarray<std::size_t> id_data(n_elements);
@@ -262,6 +278,13 @@ inline void CHECK_SIZE(std::vector<size_t> dims, int n_elements)
     assertm(n_elements == size_tdims, ERROR_SIZE_MISMATCH) if (n_elements != size_tdims) throw std::runtime_error(ERROR_SIZE_MISMATCH);
 }
 
+// https://pytorch.org/docs/stable/notes/broadcasting.html  check if tensors are "broadcastable"
+inline void CHECK_ARGS_OPS(const std::vector<size_t> dims, const std::vector<size_t> tdims)
+{
+    for(int i=-1 ;  i>=-std::min(dims.size(), tdims.size()) ; i--){
+        if(std::min(dims[dims.size() + i], tdims[tdims.size() + i])!=1 &&  tdims[tdims.size() + i]!=dims[dims.size() + i]) throw std::runtime_error(ERROR_SIZE_MISMATCH);
+    }
+}
 /**
  * @brief check valid dims for indexing a tensor given the tensor's dims
  *
