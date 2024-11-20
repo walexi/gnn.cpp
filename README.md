@@ -1,4 +1,4 @@
-# gnn.cpp (Work in Progres)
+# gnn.cpp
 
 implementing graph nn from scratch in C++ / CUDA
  
