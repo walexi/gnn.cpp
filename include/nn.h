@@ -268,16 +268,16 @@ namespace nn
             }
             std::shared_ptr<cyg::tensor<float>> forward(const std::shared_ptr<cyg::tensor<float>>& x){
                 
-                auto mean = x->mean(-2, true); // mean over features _,N,F
-                std::shared_ptr<cyg::tensor<float>> normalize_x;
+                auto mean = x->mean(-2, true); // mean of features across batch _,N,F
+                std::shared_ptr<cyg::tensor<float>> scaled_x;
                 if(!training && _tracking_running_stats){
                     // assertm(!x->_enable_grad, "pls disbale grad to run inference");
-                    normalize_x = (x - _mean_avg) / (_var_avg + _eps)->pow(0.5);
+                    scaled_x = (x - _mean_avg) / (_var_avg + _eps)->pow(0.5);
                 } else {
                     auto var = x->var(-2, 0, true);
-                    normalize_x = (x- mean) / (var + _eps)->pow(0.5);
+                    scaled_x = (x- mean) / (var + _eps)->pow(0.5);
                 }
-                auto scaled_output = normalize_x * _gammas;
+                auto scaled_output = scaled_x * _gammas;
                 if(_affine) scaled_output = scaled_output + _betas;
 
                 if(_tracking_running_stats && training) {
@@ -300,6 +300,38 @@ namespace nn
         double _momentum;
         bool _affine;
         bool _tracking_running_stats;
+    };
+
+
+    class LayerNorm : public Module{
+        public:
+            LayerNorm(size_t normalized_shape, float eps=1e-05, bool elementwise_affine=true, bool bias=true): Module(), _normalized_shape(normalized_shape), _eps(eps), _elementwise_affine(elementwise_affine), _bias(bias){
+                std::vector<size_t> dims = {1, normalized_shape};
+                if (elementwise_affine) {
+                    _gammas = std::make_shared<cyg::tensor<float>>(dims, 1, true, true);
+                    register_parameter("gammas", _gammas);
+                    if(_bias){
+                        _betas = std::make_shared<cyg::tensor<float>>(dims, 0, true, true);
+                        register_parameter("betas", _betas);
+                    }
+                }
+                training = true;
+                name="LayerNormOp";
+            }
+            std::shared_ptr<cyg::tensor<float>> forward(const std::shared_ptr<cyg::tensor<float>>& x){
+                auto scaled_x = (x - x->mean(-1, true)) / (x->var(-1, 0, true) + _eps)->pow(0.5);
+                if(_elementwise_affine) scaled_x = scaled_x * _gammas;
+                if(_bias) scaled_x = scaled_x + _betas;
+                scaled_x->grad_fn->name=name;
+                return scaled_x;
+            }
+             
+        std::shared_ptr<cyg::tensor<float>> _gammas;
+        std::shared_ptr<cyg::tensor<float>> _betas;
+        int _normalized_shape;
+        float _eps;
+        bool _elementwise_affine;
+        bool _bias;
     };
 
 
