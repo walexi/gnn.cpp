@@ -190,13 +190,14 @@ namespace nn
     class ReLU : public Module
     {
     public:
-        ReLU() : Module() { this->name = "ReLU"; }
+        ReLU() : Module() { name = "ReLU"; }
         std::shared_ptr<cyg::tensor<float>> forward(const std::shared_ptr<cyg::tensor<float>> &input_tensor)
         {
             auto condition = input_tensor > 0.0f;
             // auto mask = zeros->where(input_tensor>0.0f, 1.0f); // max(0, x)  y = x if x>0 else 0;
             // auto output = functional::abs(input_tensor * mask); //using abs to handle -ve float, no side effect on backprop of input_tensor
             auto output = input_tensor->where(condition, 0.0f);
+            output->grad_fn->name=name;
             return output;
         };
     };
@@ -208,6 +209,7 @@ namespace nn
         Dropout(double p = 0.2) : Module(), p(p) {
             if(p>1.0 || p<0.0) throw std::runtime_error("invalid input, prob should be between 0 and 1 (inclusive)");
             training = true;
+            name="DropoutOp";
         };
         std::shared_ptr<cyg::tensor<float>> forward(const std::shared_ptr<cyg::tensor<float>> &input_tensor)
         {
@@ -225,7 +227,7 @@ namespace nn
             auto mask_tensor = make_shared<cyg::tensor<bool>>(input_tensor->shape(), mask_data, false);
             auto output = input_tensor->where(mask_tensor, 0.0f); // zero out neurons with prob of p (1-p in d)
             output = output / (1 - p); //scaled by 1/1-p
-            output->grad_fn->name="ReLuOp";
+            output->grad_fn->name=name;
 
             return output;
         };
@@ -234,10 +236,10 @@ namespace nn
 
     class Softmax : public Module{
         public:
-            Softmax(int d): Module(), dim(d){ this->name="Softmax";}
+            Softmax(int d): Module(), dim(d){ name="Softmax";}
             std::shared_ptr<cyg::tensor<float>> forward(const std::shared_ptr<cyg::tensor<float>>& x){
                 auto output = x->exp() / x->exp()->sum(dim, true);
-                output->grad_fn->name="SoftmaxOp"; //for debuging purpose
+                output->grad_fn->name=name; //for debuging purpose
                 return output;
             };
         int dim;
@@ -251,17 +253,18 @@ namespace nn
         public:
             BatchNorm(size_t num_features, float eps=1e-05, double momentum=0.1, bool affine=true, bool track_running_stats=true): Module(), _num_features(num_features), _eps(eps), _momentum(momentum), _affine(affine), _tracking_running_stats(track_running_stats) {
                 std::vector<size_t> dims = {1, num_features};
-                this->_gammas = std::make_shared<cyg::tensor<float>>(dims, 1, true, true);
+                _gammas = std::make_shared<cyg::tensor<float>>(dims, 1, true, true);
                 register_parameter("gammas", _gammas);
                 if (affine) {
-                    this->_betas = std::make_shared<cyg::tensor<float>>(dims, 0, true, true);
+                    _betas = std::make_shared<cyg::tensor<float>>(dims, 0, true, true);
                     register_parameter("betas", _betas);
                 }
                 if(_tracking_running_stats){
-                    this->_mean_avg = std::make_shared<cyg::tensor<float>>(dims, 0, false, false); //stats, no backprop
-                    this->_var_avg = std::make_shared<cyg::tensor<float>>(dims, 0, false, false);
+                    _mean_avg = std::make_shared<cyg::tensor<float>>(dims, 0, false, false); //stats, no backprop
+                    _var_avg = std::make_shared<cyg::tensor<float>>(dims, 0, false, false);
                 }
-                this->training = true;
+                training = true;
+                name="BatchNormOp";
             }
             std::shared_ptr<cyg::tensor<float>> forward(const std::shared_ptr<cyg::tensor<float>>& x){
                 
@@ -284,6 +287,7 @@ namespace nn
                     _var_avg = (_var_avg * _momentum) + x_clone->var(-2, 1, true, true) * (1 - _momentum);
                     mean->enable_grad(true); //prolly not neccessarily, just some bookkeeping
                 }
+                scaled_output->grad_fn->name = name;
                 return scaled_output;
             }
         // prolly not needed, can as well use the get_parameter method
