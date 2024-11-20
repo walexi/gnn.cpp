@@ -312,7 +312,7 @@ namespace cyg
             // TODO use unique_ptr instead of shared_ptr
             auto add_op = std::unique_ptr<cyg::Add<tensor<T>>>(new cyg::Add<tensor<T>>());
             auto output = add_op->forward(this->shared_from_this(), other, this->_enable_grad);
-            if (this->_enable_grad)
+            if (this->_enable_grad && other->_enable_grad)
                 output->grad_fn = std::move(add_op);
             return output;
         };
@@ -337,7 +337,7 @@ namespace cyg
             }
             auto mul_op = std::unique_ptr<cyg::Mul<tensor<T>>>(new cyg::Mul<tensor<T>>());
             auto output = mul_op->forward(this->shared_from_this(), other, this->_enable_grad);
-            if (this->_enable_grad)
+            if (this->_enable_grad && other->_enable_grad)
                 output->grad_fn = std::move(mul_op);
             return output;
         };
@@ -357,7 +357,7 @@ namespace cyg
             }
             auto mat_mul_op = std::unique_ptr<cyg::MatMul<tensor<T>>>(new cyg::MatMul<tensor<T>>());
             auto output = mat_mul_op->forward(this->shared_from_this(), other, this->_enable_grad);
-            if (this->_enable_grad)
+            if (this->_enable_grad && other->_enable_grad)
                 output->grad_fn = std::move(mat_mul_op);
 
             return output;
@@ -369,7 +369,7 @@ namespace cyg
          * @param other(type: cyg::tensor)
          * @return tensor (type cyg::tensor)
          */
-        std::shared_ptr<tensor<T>> div(const std::shared_ptr<tensor<T>> &other)
+        std::shared_ptr<tensor<T>> div(const std::shared_ptr<tensor<T>>& other)
         {
             CHECK_ARGS_OPS_BROADCAST(this->shape(), other->shape());
             if (!this->_requires_grad && !other->requires_grad())
@@ -378,7 +378,7 @@ namespace cyg
             }
             auto div_op = std::unique_ptr<cyg::Div<tensor<T>>>(new cyg::Div<tensor<T>>());
             auto output = div_op->forward(this->shared_from_this(), other, this->_enable_grad);
-            if (this->_enable_grad)
+            if (this->_enable_grad && other->_enable_grad)
                 output->grad_fn = std::move(div_op);
 
             return output;
@@ -394,7 +394,7 @@ namespace cyg
          * @param other(type: cyg::tensor)
          * @return tensor (type cyg::tensor)
          */
-        std::shared_ptr<tensor<T>> pow(const std::shared_ptr<tensor<T>> &exponent, const bool &inplace = false)
+        std::shared_ptr<tensor<T>> pow(const std::shared_ptr<tensor<T>>& exponent, const bool &inplace = false)
         {
             CHECK_ARGS_OPS_BROADCAST(this->shape(), exponent->shape());
             std::shared_ptr<tensor<T>> output;
@@ -404,7 +404,7 @@ namespace cyg
             }
             auto pow_op = std::unique_ptr<cyg::Pow<tensor<T>>>(new cyg::Pow<tensor<T>>());
             output = pow_op->forward(this->shared_from_this(), exponent, this->_enable_grad);
-            if (this->_enable_grad)
+            if (this->_enable_grad && exponent->_enable_grad)
                 output->grad_fn = std::move(pow_op);
             if (inplace)
             {
@@ -432,7 +432,7 @@ namespace cyg
             }
             auto mask_op = std::make_unique<Mask<tensor<T>>>();
             output = mask_op->forward(bool_tensor->to_float(), this->shared_from_this(), other, this->_enable_grad);
-            if (this->_enable_grad)
+            if (this->_enable_grad && other->_enable_grad)
                 output->grad_fn = std::move(mask_op);
             return output;
         }
