@@ -1,20 +1,23 @@
 #ifndef OPERATION_H
 #define OPERATION_H
-#include "util.h"
+
 #include <map>
 #include <valarray>
 #include <vector>
 #include <memory>
-
+#include "functional.h"
 #include <iostream>
 #include <numeric>
 #include <random>
-
 
 namespace cyg
 {
     // template <typename T>
     //  void op_cpu(std::valarray<float>& out, const std::valarray<float>& lhs, const std::valarray<float>& rhs, T operation);
+
+    // TODO use heterogeneous containers for the cache to save different tensor types
+    // boost.any comes to the rescue
+
 
     template <class T>
     class Context
@@ -56,6 +59,7 @@ namespace cyg
         ~Context() noexcept
         {
             this->saved_data.clear();
+            this->cache.clear();
         }
     };
 
@@ -70,50 +74,46 @@ namespace cyg
         {
             this->context = std::make_unique<Context<T>>();
         };
-        virtual void backward(T* incoming_grad) {};
+        std::string name;
+        void reset(){
+            this->context.reset(new Context<T>());
+        }
+        virtual void backward(std::shared_ptr<T> incoming_grad) {};
         // Operation(const Operation &operation) : context(std::move(operation->context)) {} // rule of three/five/zero
+        friend std::ostream& operator<<(std::ostream& out, const Operation& op){
+            out<<op.name<<"Op";
+            return out;
+        }
         ~Operation() noexcept
         {
-            this->context.reset();
+            this->context.reset(new Context<T>());
         }
     };
 
-    template <class T>
-    class Add : public Operation<T>
-    {
-    public:
-        Add() : Operation<T>() {}
-        std::shared_ptr<T> forward(const std::shared_ptr<T> &lhs, const std::shared_ptr<T> &rhs)
-        {
-            typename T::value_type dtype;
-            assertm(lhs->get_device() == rhs->get_device(), "tensors are on different devices");
-            if (lhs->get_device() != rhs->get_device())
-                throw std::runtime_error("tensors are on different devices");
-            auto req_grad = lhs->require_grad() || rhs->require_grad();
-            auto out_data = new (std::nothrow) std::valarray<decltype(dtype)>(); // allocating object on the heap,dont forget
-            if (out_data == nullptr)
-                throw std::runtime_error("insufficient memory");
-            *out_data = *lhs->data() + *rhs->data();
-            auto out = std::make_shared<T>(*out_data, lhs->shape(), lhs->get_device(), req_grad);
-            if (lhs->require_grad() || rhs->require_grad())
-                this->context->save_for_backward({lhs, rhs});
 
-            return out;
+    template <class T>
+    class Add : public Operation<T>    {
+    public:
+        Add() : Operation<T>() { this->name="Add";}
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &lhs, const std::shared_ptr<T> &rhs, const bool& enable_grad=false)
+        {
+            if(enable_grad) this->context->save_for_backward({lhs, rhs});
+            auto output = functional::add(lhs, rhs);
+            output->enable_grad(enable_grad);
+            return output;
         };
-        void backward(T* incoming_grad) override
+        void backward(std::shared_ptr<T> incoming_gradient)
         {
             auto var = this->context->get_variables();
-            std::string err_msg = "cant backprop without executing a forward computation first";
-            assertm(var.size() != 0, err_msg);
-            if (var.size() == 0)
-                throw std::runtime_error(err_msg);
+            CHECK_BACKWARD<T>(var, 2);
             for (const auto &t : var)
-                if (t->require_grad())
-                {
-                    // resize(t->n_elements(), incoming_grad->);
-                    t->backward(incoming_grad);
+                if (t->requires_grad()) 
+                { 
+                    auto cloned_grad = incoming_gradient->clone(false);
+                    cloned_grad->sum_to_size(t->shape());
+                    t->backward(cloned_grad);
                 }
-            this->context.reset();
+            // this->reset();
         };
     };
 
@@ -121,86 +121,76 @@ namespace cyg
     class Mul : public Operation<T>
     {
     public:
-        Mul() : Operation<T>() {}
-        std::shared_ptr<T> forward(const std::shared_ptr<T> &lhs, const std::shared_ptr<T> &rhs)
+        Mul() : Operation<T>() { this->name="Mul";}
+        std::shared_ptr<T> forward(const std::shared_ptr<T>& lhs, const std::shared_ptr<T>& rhs, const bool& enable_grad=true)
         {
-            typename T::value_type dtype;
-            assertm(lhs->get_device() == rhs->get_device(), "tensors are on different devices");
-            if (lhs->get_device() != rhs->get_device())
-                throw std::runtime_error("tensors are on different devices");
-            auto req_grad = lhs->require_grad() || rhs->require_grad();
-            auto out_data = new (std::nothrow) std::valarray<decltype(dtype)>();
-            if (out_data == nullptr)
-                throw std::runtime_error("insufficient memory");
-            *out_data = *lhs->data() * *rhs->data();
-            auto out = std::make_shared<T>(*out_data, lhs->shape(), lhs->get_device(), req_grad);
-            this->context->save_for_backward({lhs, rhs});
-            return out;
+            if(enable_grad) this->context->save_for_backward({lhs, rhs});
+            auto output = functional::mul(lhs, rhs);
+            output->enable_grad(enable_grad);
+            return output;
         };
-        void backward(T* incoming_grad) override
+        void backward(std::shared_ptr<T> incoming_grad) override
         {
             auto var = this->context->get_variables();
-            assertm(var.size() == 2, "invalid");
+            CHECK_BACKWARD<T>(var, 2);
             auto lhs = var[0];
             auto rhs = var[1];
-            // resize(lhs->n_elements(), incoming_grad); // lhs same size with rhs
-            if (rhs->require_grad())
+            if (rhs->requires_grad())
             {
-                std::valarray<float> data = *incoming_grad->data() * *lhs->data(); // y=a*b, dy/da = b = 1 * b
-                auto grad = std::shared_ptr<T>(&data, rhs->shape(), incoming_grad->get_device(), false);
-                rhs->backward(grad.get());
+                auto cloned_grad = incoming_grad->clone(false);
+                auto cloned_lhs = lhs->clone(false);
+                auto local_grad = cloned_grad * cloned_lhs;
+                local_grad->sum_to_size(rhs->shape());
+                rhs->backward(local_grad);
             }
-            if (lhs->require_grad())
+            if (lhs->requires_grad())
             {
-                std::valarray<float> data = *incoming_grad->data() * *rhs->data();
-                auto grad = std::shared_ptr<T>(&data, lhs->shape(), incoming_grad->get_device(), false);
-                lhs->backward(grad.get());
+                auto cloned_grad = incoming_grad->clone(false);
+                auto cloned_rhs = rhs->clone(false);
+                auto local_grad = cloned_grad * cloned_rhs;
+                local_grad->sum_to_size(lhs->shape());              
+                lhs->backward(local_grad);
             }
-            this->context.reset();
+            this->reset();
         };
     };
     template <class T>
     class Div : public Operation<T>
     {
     public:
-        Div() : Operation<T>() {}
-        std::shared_ptr<T> forward(const std::shared_ptr<T> &numerator, const std::shared_ptr<T> &denominator)
+        Div() : Operation<T>() {this->name="Div";}
+        std::shared_ptr<T> forward(const std::shared_ptr<T>& numerator, const std::shared_ptr<T>& denominator, const bool& enable_grad=true)
         {
-            typename T::value_type dtype;
-            assert(numerator->get_device() == denominator->get_device() && "tensors are on different devices");
-            if (numerator->get_device() != denominator->get_device())
-                throw std::runtime_error("tensors are on different devices");
-            auto req_grad = numerator->require_grad() || denominator->require_grad();
-            auto out_data = new (std::nothrow) std::valarray<decltype(dtype)>();
-            if (out_data == nullptr)
-                throw std::runtime_error("insufficient memory");
-            *out_data = *numerator->data() / *denominator->data();
-            auto out = std::make_shared<T>(*out_data, numerator->shape(), numerator->get_device(), req_grad);
-            this->context->save_for_backward({numerator, denominator});
-
-            return out;
+            if(enable_grad) this->context->save_for_backward({numerator, denominator});
+            auto output = functional::div(numerator, denominator);
+            output->enable_grad(enable_grad);
+            return output;
         };
-        void backward(T* incoming_grad) override
+        void backward(std::shared_ptr<T> incoming_grad) override
         {
             auto var = this->context->get_variables();
-            assertm(var.size() == 2, "invalid"); // for debugging purpose
+            CHECK_BACKWARD<T>(var, 2);
             auto numerator = var[0];
             auto denominator = var[1];
-            // resize(numerator->n_elements(), incoming_grad);
             // y= a/b y = a * b**-1   dy/da = b**-1=1/b  dy/db = -a*b**-2
-            if (numerator->require_grad())
+            if (numerator->requires_grad())
             {
-                std::valarray<float> data = *incoming_grad->data() / *denominator->data();
-                auto local_grad = std::make_shared<T>(&data, incoming_grad->shape(), incoming_grad->get_device(), false);
-                numerator->backward(local_grad.get());
+                auto cloned_grad = incoming_grad->clone(false);
+                auto cloned_denominator = denominator->clone(false);
+                auto local_grad = cloned_grad / cloned_denominator;
+                local_grad->sum_to_size(numerator->shape());
+                numerator->backward(local_grad);
             }
-            if (denominator->require_grad())
+            if (denominator->requires_grad())
             { // dy/db = -a*b**-2
-                std::valarray<float> data = *incoming_grad->data() * -1 * (*numerator->data() / std::pow(*denominator->data(), 2));
-                auto local_grad = std::make_shared<T>(&data, incoming_grad->shape(), incoming_grad->get_device(), false);
-                denominator->backward(local_grad.get());
+            auto cloned_grad = incoming_grad->clone(false);
+                auto cloned_numerator = numerator->clone(false);
+                auto cloned_denominator = denominator->clone(false);
+                auto local_grad = cloned_grad * (-cloned_numerator / cloned_denominator->pow(2));
+                local_grad->sum_to_size(denominator->shape());
+                denominator->backward(local_grad);
             }
-            this->context.reset();
+            this->reset();
         };
     };
 
@@ -208,362 +198,344 @@ namespace cyg
     class Pow : public Operation<T>
     {
     public:
-        Pow() : Operation<T>() {}
-        std::shared_ptr<T> forward(const std::shared_ptr<T> &base, const std::shared_ptr<T> &exponent)
+        Pow() : Operation<T>() {this->name="Pow";}
+        std::shared_ptr<T> forward(const std::shared_ptr<T>& base, const std::shared_ptr<T>& exponent, const bool& enable_grad=true)
         {
-            typename T::value_type dtype;
-            assert(base->get_device() == exponent->get_device() && "tensors are on different devices");
-            if (base->get_device() != exponent->get_device())
-                throw std::runtime_error("tensors are on different devices");
-            auto req_grad = base->require_grad() || exponent->require_grad();
-            auto out_data = new (std::nothrow) std::valarray<decltype(dtype)>();
-            if (out_data == nullptr)
-                throw std::runtime_error("insufficient memory");
-            *out_data = std::pow(*base->data(), *exponent->data());
-            auto out = std::make_shared<T>(*out_data, base->shape(), base->get_device(), req_grad);
-            this->context->save_for_backward({base, exponent});
-
-            return out;
+            if(enable_grad) this->context->save_for_backward({base, exponent});
+            auto output = functional::pow(base, exponent);
+            output->enable_grad(enable_grad);
+            return output;
         };
-        void backward(T* incoming_grad) override
+        void backward(std::shared_ptr<T> incoming_grad) override
         {
             auto var = this->context->get_variables();
-            assertm(var.size() == 2, "invalid"); // for debugging purpose
+            CHECK_BACKWARD<T>(var, 2);
             auto base = var[0];
             auto exponent = var[1];
-            // resize(base->n_elements(), incoming_grad);
             // y = b**e    dy/db = e*b**e-1
-            if (base->require_grad())
+            if (base->requires_grad())
             {
-                std::valarray<float> data = *incoming_grad->data() * (*exponent->data() * std::pow(base->data(), exponent->data() - 1));
-                auto local_grad = std::make_shared<T>(&data, incoming_grad->shape(), incoming_grad->get_device(), false);
-                base->backward(local_grad.get());
+                auto cloned_grad = incoming_grad->clone(false);
+                cloned_grad->sum_to_size(base->shape());
+                auto cloned_exponent = exponent->clone(false);
+                auto cloned_base = base->clone(false);
+                auto local_grad = cloned_grad * (cloned_exponent * cloned_base->pow(cloned_exponent - 1));
+                base->backward(local_grad);
             }
-            if (exponent->require_grad())
+            if (exponent->requires_grad())
             { // logy = elogb dy(1/y) = delogb dy/de = ylogb = b**e * logb     (logb natural log)
-                std::valarray<float> data = *incoming_grad->data() * (std::pow(*base->data(), *exponent->data()) * std::log(*base->data()));
-                auto local_grad = std::make_shared<T>(&data, incoming_grad->shape(), incoming_grad->get_device(), false);
-                exponent->backward(local_grad.get());
+                auto cloned_grad = incoming_grad->clone(false);
+                cloned_grad->sum_to_size(exponent->shape());
+                auto cloned_exponent = exponent->clone(false);
+                auto cloned_base = base->clone(false);
+                auto local_grad = cloned_grad * (cloned_base->pow(cloned_exponent) * cloned_base->log());
+                exponent->backward(local_grad);
             }
-            this->context.reset();
+            this->reset();
         };
     };
+    
+    template <class T>
+    class Sum : public Operation<T>
+    {
+    public:
+        Sum() : Operation<T>() {this->name="Sum";}
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &base, int dim = INT_MAX, const bool& keepdim = false, const bool& enable_grad=true)
+        {
+            if(enable_grad) {
+                this->context->save_for_backward({base});
+                this->context->saved_data["dim"] = dim<0? base->rank() + dim : dim;
+                this->context->saved_data["keepdim"] = keepdim;
+            }
+            auto output = functional::sum(base, dim, keepdim);
+            output->enable_grad(enable_grad);
+            return output;
+        };
+        void backward(std::shared_ptr<T> incoming_grad) override
+        {
+            auto var = this->context->get_variables();
+            CHECK_BACKWARD(var, 1);
+            auto base = var[0];
+            auto dim = this->context->saved_data["dim"];
+            auto keepdim = this->context->saved_data["keepdim"];
+            // y = a+b+c+d+.. dy/da = 1
+            if (base->requires_grad())
+            {
+                auto cloned_grad = incoming_grad->clone(false);
+                if(dim!=INT_MAX && !keepdim) cloned_grad->unsqueeze(dim);
+                cloned_grad->expand(base->shape());
+                cloned_grad->sum_to_size(base->shape());
+                base->backward(cloned_grad);
+            }
+            this->reset();
+        };
+    };
+
     template <class T>
     class Mean : public Operation<T>
     {
     public:
-        Mean() : Operation<T>() {}
-        std::shared_ptr<T> forward(const std::shared_ptr<T> &base, const int &dim, const bool &keepdim = true)
+        Mean() : Operation<T>() {this->name="Mean";}
+        std::shared_ptr<T> forward(const std::shared_ptr<T>& base, int dim = INT_MAX, const bool &keepdim = true, const bool& enable_grad=true)
         {
-            typename T::value_type dtype;
-            CHECK_VALID_RANGE(dim, base->rank());
-            std::valarray<size_t> strides, sizes, idxs;
-            std::tie(strides, sizes, idxs) = generate_idxs(base->shape(), dim);
-            std::valarray<decltype(dtype)> data = *base->data();
-            auto out_data = new (std::nothrow) std::valarray<decltype(dtype)>(idxs.size());
-            if (out_data == nullptr)
-                throw std::runtime_error("insufficient memory");
-            //@todo improve using gslice
-            for (int i = 0; i < idxs.size(); i++)
-            {
-                auto m = std::valarray(data[std::slice(idxs[i], base->shape()[dim], strides[dim])]).sum() / base->shape()[dim];
-                (*out_data)[i] = m;
-            };
-            std::vector<size_t> new_dims;
-            new_dims.assign(begin(sizes), end(sizes));
-
-            auto output = std::make_shared<T>(*out_data, new_dims, base->get_device(), base->require_grad());
-            if (!keepdim)
-                output->squeeze();
-
-            this->context->save_for_backward({base});
-            this->context->saved_data["dim"] = dim;
-
+            if(enable_grad){
+                this->context->save_for_backward({base});
+                this->context->saved_data["dim"] =  dim<0? base->rank() + dim : dim;
+                this->context->saved_data["keepdim"] = keepdim;
+            }
+            auto output = functional::mean(base, dim, keepdim);
+            output->enable_grad(enable_grad);
             return output;
         };
-        void backward(T* incoming_grad) override
+        void backward(std::shared_ptr<T> incoming_grad) override
         {
             auto var = this->context->get_variables();
-            assertm(var.size() == 1, "invalid"); // for debugging purpose
-            assertm(this->context->saved_data.size() == 2, "invalid");
-            auto dim = this->context->saved_data["dim"];
+            CHECK_BACKWARD<T>(var, 1);
+            assertm(this->context->saved_data.size() == 1, "invalid");
             auto base = var[0];
+            auto dim = this->context->saved_data["dim"];
+            auto keepdim = this->context->saved_data["keepdim"];
             // y = (a_1 + a_2 + ... + a_n) / n    where n = base->shape()[dims]
             // dy/da_1 = 1/n
-            // resize(base->n_elements(), incoming_grad);
-
-            if (base->require_grad())
+            if (base->requires_grad())
             {
-                auto out_data = std::valarray<float>(base->n_elements(), 1 / base->shape()[dim]);
-                std::valarray<float> data = *incoming_grad->data() * out_data;
-                auto local_grad = std::make_shared<T>(&data, incoming_grad->shape(), incoming_grad->get_device(), false);
-                base->backward(local_grad.get());
+                auto cloned_grad = incoming_grad->clone(false);
+                cloned_grad/=(dim==INT_MAX? base->numel() : base->shape()[dim]);                
+
+                if(dim!=INT_MAX && !keepdim) cloned_grad->unsqueeze(dim);
+                cloned_grad->expand(base->shape());
+                
+                // cloned_grad->sum_to_size(base->shape());
+                base->backward(cloned_grad);
             }
-            this->context.reset();
+            this->reset();
         };
     };
+
     template <class T>
     class Exp : public Operation<T>
     {
     public:
-        Exp() : Operation<T>() {}
-        std::shared_ptr<T> forward(const std::shared_ptr<T> &exponent)
+        Exp() : Operation<T>() {this->name="Exp";}
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &base, const bool& enable_grad=true)
         {
-            typename T::value_type dtype;
-            auto out_data = new (std::nothrow) std::valarray<decltype(dtype)>();
-            if (out_data == nullptr)
-                throw std::runtime_error("insufficient memory");
+            if(enable_grad) this->context->save_for_backward({base});
+            auto output = functional::exp(base);
+            output->enable_grad(enable_grad);
 
-            *out_data = std::exp(*exponent->data());
-
-            auto out = std::make_shared<T>(*out_data, exponent->shape(), exponent->get_device(), exponent->require_grad());
-            this->context->save_for_backward({exponent});
-
-            return out;
+            return output;
         };
-        void backward(T* incoming_grad) override
+        void backward(std::shared_ptr<T> incoming_grad) override
         {
             auto var = this->context->get_variables();
             assertm(var.size() == 1, "invalid"); // for debugging purpose
             // y= e**x   logy = xloge   logy = x  i/y(dy) = dx  dy/dx = y = e**x
             auto base = var[0];
-            // resize(base->n_elements(), incoming_grad);
-            if (base->require_grad())
+
+            if (base->requires_grad())
             {
-                std::valarray<float> data = *incoming_grad->data() * std::exp(*base->data());
-                auto local_grad = std::make_shared<T>(&data, incoming_grad->shape(), incoming_grad->get_device(), false);
-                base->backward(local_grad.get());
+                auto cloned_base = base->clone(false);
+                auto local_grad = incoming_grad * functional::exp(cloned_base);
+                base->backward(local_grad);
             }
-            this->context.reset();
+            this->reset();
         };
     };
     template <class T>
     class Log : public Operation<T>
     {
     public:
-        Log() : Operation<T>() {}
-        std::shared_ptr<T> forward(const std::shared_ptr<T> &t)
+        Log() : Operation<T>() {this->name="Log";}
+        std::shared_ptr<T> forward(const std::shared_ptr<T>& base, const bool& enable_grad=true)
         {
-            typename T::value_type dtype;
-            auto out_data = new (std::nothrow) std::valarray<decltype(dtype)>();
-            if (out_data == nullptr)
-                throw std::runtime_error("insufficient memory");
+            if(enable_grad) this->context->save_for_backward({base});
 
-            *out_data = std::log(*t->data());
-
-            auto out = std::make_shared<T>(*out_data, t->shape(), t->get_device(), t->require_grad());
-            this->context->save_for_backward({t});
-            // this->context->saved_data["base"] = base;
-
-            return out;
+            auto output = functional::log(base);
+            output->enable_grad(enable_grad);
+            return output;
         };
-        void backward(T* incoming_grad) override
+        void backward(std::shared_ptr<T> incoming_grad) override
         {
             auto var = this->context->get_variables();
             assertm(var.size() == 1, "invalid");
             auto base = var[0];
-            // resize(base->n_elements(), incoming_grad);
-            if (base->require_grad())
+
+            if (base->requires_grad())
             { // y = logx   dy/dx = 1/x
-                std::valarray<float> data = *incoming_grad->data() / *base->data();
-                auto local_grad = std::make_shared<T>(&data, base->shape(), base->get_device(), false);
-                base->backward(local_grad.get());
+                auto cloned_base = base->clone(false);
+                auto local_grad = incoming_grad / cloned_base;
+                base->backward(local_grad);
             }
-            this->context.reset();
+            this->reset();
         };
     };
 
     template <class T>
-    class Sum : public Operation<T>
-    {
-    public:
-        Sum() : Operation<T>() {}
-        std::shared_ptr<T> forward(const std::shared_ptr<T> &base, const int &dim = -1, const bool &keepdim = true)
-        {
-            typename T::value_type dtype;
-            CHECK_VALID_RANGE(dim, base->rank(), -1);
-            auto out_data = new (std::nothrow) std::valarray<decltype(dtype)>(1);
-            if (out_data == nullptr)
-                throw std::runtime_error("insufficient memory");
-            std::vector<size_t> new_dims = {1};
-            if (dim == -1)
-                (*out_data)[0] = (*base->data()).sum();
-            else
-            {
-                std::valarray<size_t> strides, sizes, idxs;
-                std::tie(strides, sizes, idxs) = generate_idxs(base->shape(), dim);
-                std::valarray<decltype(dtype)> data = *base->data();
-                out_data->resize(idxs.size());
-                //@todo improve using gslice
-                for (int i = 0; i < idxs.size(); ++i)
-                {
-                    (*out_data)[i] = std::valarray(data[std::slice(idxs[i], base->shape()[dim], strides[dim])]).sum();
-                };
-                new_dims.assign(begin(sizes), end(sizes));
-            }
-            auto output = std::make_shared<T>(*out_data, new_dims, base->get_device(), base->require_grad());
-            if (!keepdim && dim != -1)
-                output->squeeze();
-
-            this->context->save_for_backward({base});
-            this->context->saved_data["dim"] = dim;
-            return output;
-        };
-        void backward(T* incoming_grad) override
-        {
-            auto var = this->context->get_variables();
-            assertm(var.size() == 1, "invalid");
-            auto base = var[0];
-            // y = a+b+c+d+.. dy/da = 1
-            // resize(base->n_elements(), incoming_grad);
-            if (base->require_grad())
-            {
-                auto out_data = std::valarray<float>(base->n_elements(), 1);
-                std::valarray<float> data = *incoming_grad->data() * out_data;
-                auto local_grad = std::make_shared<T>(&data, base->shape(), base->get_device(), false);
-                base->backward(local_grad.get());
-            }
-            this->context.reset();
-        };
-    };
-
-
- template <class T>
     class Transpose : public Operation<T>
     {
     public:
-        Transpose() : Operation<T>() {}
-        std::shared_ptr<T> forward(const std::shared_ptr<T> &lhs, int r=0, int c=1)
+        Transpose() : Operation<T>() {this->name="Transpose";}
+        std::shared_ptr<T> forward(const std::shared_ptr<T>& lhs, int d1 = -1, int d2 = -2, const bool& enable_grad=true)
         {
-            //only works for 0,1, 1,2. not working for 0,2 for now =fix
-            typename T::value_type dtype;
-
-            auto out_data = new (std::nothrow) std::valarray<decltype(dtype)>(lhs->n_elements());
-            if (out_data == nullptr)
-                throw std::runtime_error("insufficient memory");
-
-            auto new_dims = lhs->shape();
-            std::iter_swap(new_dims.begin()+r, new_dims.begin()+c);
-
-            int n_ele = lhs->shape()[std::min(r, c)];
-            
-            std::valarray<size_t> col_strides, col_idxs, row_strides, row_idxs;
-            std::tie(col_strides, std::ignore, col_idxs) = generate_idxs(new_dims, std::max(r,c)); //based on new dims
-            std::tie(row_strides, std::ignore, row_idxs) = generate_idxs(lhs->shape(), std::min(r,c)); //based on old dims
-            auto data = *lhs->data();
-            // row_idxs.size() == col_idxs.size()
-            for(int i=0;i<row_idxs.size(); i++){
-                (*out_data)[std::slice(col_idxs[i] , n_ele, col_strides[std::max(r,c)])] = data[std::slice( row_idxs[i], n_ele, row_strides[std::min(r,c)])];
+            // only works for 0,1, 1,2. not working for 0,2 for now =fix
+            if(enable_grad){
+                this->context->save_for_backward({lhs});
+                this->context->saved_data["d1"] = d1;
+                this->context->saved_data["d2"]=d2;
             }
-
-            auto output = std::make_shared<T>(*out_data, new_dims, lhs->get_device(), lhs->require_grad());
-
-            this->context->save_for_backward({lhs});
-
+            auto output = functional::transpose(lhs, d1, d2);
+            output->enable_grad(enable_grad);
             return output;
         };
 
-        void backward(T* incoming_grad) override
+        void backward(std::shared_ptr<T> incoming_grad) override
         {
-            
             auto var = this->context->get_variables();
-            assertm(var.size() == 1, "invalid");
+            CHECK_BACKWARD(var, 1);
             auto base = var[0];
-            // resize(base->n_elements(), incoming_grad);
-            if (base->require_grad())
-            {
-                auto out_data = std::valarray<float>(base->n_elements(), 1);
-                std::valarray<float> data = *incoming_grad->data() * out_data;
-                auto local_grad = std::make_shared<T>(data, base->shape(), base->get_device(), false);
-                base->backward(local_grad.get());
-            }
-            this->context.reset();
+            auto d1 = this->context->saved_data["d1"];
+            auto d2 = this->context->saved_data["d2"];
 
+            if (base->requires_grad())
+            { // @todo check, should be t
+                auto cloned_grad = incoming_grad->clone(false);
+                cloned_grad->transpose(d1, d2, true);
+                base->backward(cloned_grad);
+            }
+            this->reset();
         };
     };
-    template<class T>
-std::shared_ptr<T> matmul(T* lhs, T* rhs)
+
+    template <class T>
+    class Var : public Operation<T>
     {
-        typename T::value_type dtype;
-        const bool islhsgreater = lhs->rank()>=rhs->rank();
-        std::vector<size_t> new_dims = islhsgreater ? lhs->shape() : rhs->shape();
-        new_dims[islhsgreater ? new_dims.size()-1 : new_dims.size()-2 ] = islhsgreater ? rhs->shape()[rhs->rank() - 1] : lhs->shape()[lhs->rank() - 2];
+    public:
+        Var() : Operation<T>() {this->name="Var";}
+        std::shared_ptr<T> forward(const std::shared_ptr<T>& base, int dim = INT_MAX, const int& correction =1 ,const bool& keepdim = true, const bool& enable_grad=true)
+        {
+            if(enable_grad){
+                this->context->save_for_backward({base});
+                this->context->saved_data["dim"] = dim<0? base->rank() + dim : dim;
+                this->context->saved_data["keepdim"] = keepdim;
+                this->context->saved_data["correction"] = correction;
+            }
+            auto output = functional::var(base, dim, correction, keepdim);
+            output->enable_grad(enable_grad);
+            return output;
+        };
 
-        int n_elems = std::accumulate(new_dims.begin(), new_dims.end(), 1, std::multiplies<int>());
+        void backward(std::shared_ptr<T> incoming_grad) override
+        {
+            auto var = this->context->get_variables();
+            CHECK_BACKWARD(var, 1);
+            auto base = var[0];
+            auto dim = this->context->saved_data["dim"];
+            auto keepdim = this->context->saved_data["keepdim"];
+            auto correction = this->context->saved_data["correction"];
+            // y = (  ((x_1 - x_)^2 + (x_2 - x_)^2) / n
+            // dy/dx_1 = 2(x_1 - x) / (n-1) = 2(x_1 - x) / n * = 2 * (x - x_) / n-1
+            //@TODO check accuracy of derivative
+            if (base->requires_grad())
+            {
+                auto cloned_base = base->clone(false);
+                auto local_grad = incoming_grad->clone(false);
 
-        auto out_data = new (std::nothrow) std::valarray<decltype(dtype)>(n_elems);
-        if (out_data == nullptr)
-            throw std::runtime_error("insufficient memory");
-        auto req_grad = lhs->require_grad() || rhs->require_grad();            
+                if(!keepdim && dim!=INT_MAX) local_grad->unsqueeze(dim);
+                local_grad->expand(base->shape());
 
-        auto rhs_transpose = rhs->transpose(rhs->rank()-1, rhs->rank()-2);
+                int n_elements = dim==INT_MAX? base->numel() : base->shape()[dim];
 
-        std::valarray<std::size_t> rhs_rows, rhs_strides, lhs_rows, lhs_strides;
-        int lhs_dim = lhs->rank() - 1;
-        int rhs_dim = rhs_transpose->rank() - 1;
+                auto mean = cloned_base->mean(dim, true);
+                mean->expand(base->shape());
+                auto x_x_ = cloned_base - mean;
 
-        std::tie(lhs_strides, std::ignore, lhs_rows) =  generate_idxs(lhs->shape(), lhs_dim);
-        std::tie(rhs_strides, std::ignore, rhs_rows) =  generate_idxs(rhs_transpose->shape(), rhs_dim);
-
-        int n_ele = lhs->shape()[lhs_dim];
-
-        auto ldata = *lhs->data();
-        auto rdata = *rhs_transpose->data();
-        
-        int l_idx=0;
-        for(int r_idx = 0; r_idx<n_elems; r_idx++){
-            std::valarray<decltype(dtype)> l_slice = std::valarray(ldata[std::slice(lhs_rows[ l_idx % lhs_rows.size()], n_ele, lhs_strides[lhs_dim])]);
-            std::valarray<decltype(dtype)> r_slice = std::valarray(rdata[std::slice(rhs_rows[ r_idx % rhs_rows.size()], n_ele, rhs_strides[rhs_dim])]);
-            (*out_data)[r_idx] = (r_slice * l_slice).sum();
-            l_idx += ((r_idx + 1)% rhs->shape()[rhs->rank()-1]==0);
-        }
-        auto output = std::make_shared<T>(*out_data, new_dims, lhs->get_device(), req_grad);
-
-        return output;
-    }
+                auto grad = (local_grad * 2 * x_x_) / std::max(0, n_elements - correction);
+                // grad->sum_to_size(base->shape());
+                base->backward(grad);
+            }
+            this->reset();
+        };
+    };
+    
     template <class T>
     class MatMul : public Operation<T>
     {
     public:
-        MatMul() : Operation<T>() {}
-        std::shared_ptr<T> forward(const std::shared_ptr<T> &lhs, const std::shared_ptr<T> &rhs)
+        MatMul() : Operation<T>() {this->name="MatMul";}
+        std::shared_ptr<T> forward(const std::shared_ptr<T>& lhs, const std::shared_ptr<T>& rhs, const bool& enable_grad=true)
         {
             // ...*a*b   mm   ...*b*c = ...*a*c
-            typename T::value_type dtype;
-            
-            auto out = matmul<T>(lhs.get(), rhs.get());
+            //@todo clean up matmul and MatMul forward and backward
+            if(enable_grad) this->context->save_for_backward({lhs, rhs});
+            auto output = functional::matmul(lhs, rhs);
+            output->enable_grad(enable_grad);
 
-            this->context->save_for_backward({lhs, rhs});
-
-            return out;
+            return output;
         };
-        void backward(T* incoming_grad) override
+        void backward(std::shared_ptr<T> incoming_grad) override
         {
             // ...*a*b   mm   ...*b*c = ...*a*c
-            //incominggrad = ...*a*c
+            // incominggrad = ...*a*c
             auto var = this->context->get_variables();
-            assertm(var.size() == 2, "invalid");
+            CHECK_BACKWARD(var, 2);
             auto lhs = var[0];
-            auto rhs = var[0];
+            auto rhs = var[1];
             // y = a_11*b_11 + a_12*b_21 + a_13*b_31 + ...
             // dy/da_1* = b_11 + b_21 + b_31 + ...
             // dy/da = b.transpose() dy/db = a.transpose()
-            // resize(lhs->n_elements(), incoming_grad);
-            if (lhs->require_grad())
+            if (lhs->requires_grad())
             {
-                // resize(lhs->n_elements(), incoming_grad);
-                auto local_grad =  matmul<T>(incoming_grad, rhs->transpose().get()); //transpose = ...*c*b
-                lhs->backward(local_grad.get());
+                auto cloned_rhs = rhs->clone(false);
+                cloned_rhs->transpose(-1, -2, true);
+                auto out_tensor = functional::matmul(incoming_grad, cloned_rhs); // transpose = ...*c*b
+                out_tensor->sum_to_size(lhs->shape());
+                lhs->backward(out_tensor);
             }
-            if (rhs->require_grad())
+            if (rhs->requires_grad())
             {
-                auto local_grad = matmul<T>(incoming_grad, lhs->transpose().get()); //transpose = ...*b*a
-                rhs->backward(local_grad.get());
+                auto cloned_lhs = lhs->clone(false);
+                cloned_lhs->transpose(-1, -2, true);
+                auto out_tensor = functional::matmul(cloned_lhs, incoming_grad); // transpose = ...*b*a
+                out_tensor->sum_to_size(rhs->shape());
+                rhs->backward(out_tensor);
             }
-            this->context.reset();
+            this->reset();
         };
     };
 
+    template<class T>
+    class Mask : public Operation<T>
+    {
+        public:
+            Mask() : Operation<T>() {this->name="Mask";}
+            std::shared_ptr<T> forward(const std::shared_ptr<T>& condition, const std::shared_ptr<T>& true_value, const std::shared_ptr<T>& false_value, const bool& enable_grad=true)
+            {
+                if(enable_grad) this->context->save_for_backward({true_value, false_value, condition});
+                auto output = functional::mask(condition, true_value, false_value);
+                output->enable_grad(enable_grad);
+                return output;
+            } 
+        void backward(std::shared_ptr<T> incoming_grad) override
+        {
+            auto var = this->context->get_variables();
+            CHECK_BACKWARD(var, 3); //should be 3
+            auto true_value = var[0];
+            auto false_value = var[1];
+            auto condition = var[2];
+            if(true_value->requires_grad()){
+                auto local_grad = incoming_grad->clone(false);
+                (*local_grad->data())[(*condition->data())<=0] = 0;
+                true_value->backward(local_grad);
+            }
+
+            if(false_value->requires_grad()){
+                auto local_grad = incoming_grad->clone(false);
+                (*local_grad->data())[(*condition->data())>0] = 0;
+                false_value->backward(local_grad);
+            }
+            this->reset();   
+        }
+    };
     // template <class T>
     // class Cos : public Operation<T>
     // {
@@ -581,5 +553,5 @@ std::shared_ptr<T> matmul(T* lhs, T* rhs)
     //     std::shared_ptr<T> forward(const std::shared_ptr<T>& v1);
     //     void backward(std::valarray<float> *incoming_grad) override;
     // };
-}
+};
 #endif

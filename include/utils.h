@@ -4,6 +4,7 @@
 #include <numeric>
 #include <valarray>
 #include <vector>
+#include <unordered_map>
 #include <algorithm>
 #include <numeric>
 #include <string>
@@ -21,7 +22,7 @@
 const char ERROR_GRAD_DTYPE[] = "Only Tensors of floating point dtype can require gradients";
 const char WARNING_GRAD_NOT_LEAF[] = "UserWarning: The .grad attribute of a Tensor that is not a leaf Tensor is being accessed. Its .grad attribute won\'t be populated during autograd.backward()";
 const char ERROR_IN_PLACE_OP_LEAF[] = "RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.";
-const char ERROR_SIZE_MISMATCH[] = "tensors must be of same shape/size";
+const char ERROR_SIZE_MISMATCH[] = "tensors must be of same shape/size - mismatch between number of elements and dimension of tensor";
 const char ERROR_RANK_MISMATCH[] = "tensors are of different ranks";
 const char ERROR_OUT_OF_RANGE[] = "out of bound range";
 const char ERROR_INVALID_DIMS[] = "dims cannot be empty or zero";
@@ -33,25 +34,16 @@ const char ERROR_TRANSPOSE[] = "invalid inp";
 
 std::default_random_engine e(std::time(nullptr));
 
-// https://numpy.org/doc/stable/user/basics.broadcasting.html
-// https://pytorch.org/docs/stable/notes/broadcasting.html
-template <class T>
-void BROADCAST(T *lhs, T *rhs)
+std::ostream &operator<<(std::ostream &out, const std::vector<size_t> input)
 {
-    for (int i = -1; i >= -std::max(lhs->rank(), rhs->rank()); i--)
-    {
+    out << "(";
+    for (int i = 0; i < input.size() - 1; i++)
+        out << input[i] << " , ";
+    out << input[input.size() - 1];
+    out << ")";
+    return out;
+};
 
-        if (std::abs(i) > lhs->rank())
-            lhs->unsqueeze(0);
-        if (std::abs(i) > rhs->rank())
-            rhs->unsqueeze(0);
-        if (std::min(lhs->shape()[lhs->rank() + i], rhs->shape()[rhs->rank() + i]) == 1 && lhs->shape()[lhs->rank() + i] != rhs->shape()[rhs->rank() + i])
-        {
-            auto m = std::max(lhs->shape()[lhs->rank() + i], rhs->shape()[rhs->rank() + i]);
-            (lhs->shape()[lhs->rank() + i] == 1) ? lhs->repeat(i, m) : rhs->repeat(i, m);
-        }
-    }
-}
 /**
  * @brief generate a floating-point number from a uniform dist in the range [low, high)
  * pdf = 1/(high-low)
@@ -78,9 +70,7 @@ template <class T>
 std::valarray<T> *initialize(std::vector<size_t> dims, T value = 1)
 {
     auto n_elements = std::accumulate(dims.begin(), dims.end(), 1, std::multiplies<size_t>());
-    auto data = new (std::nothrow) std::valarray<T>(n_elements);
-    if (data == nullptr)
-        throw std::runtime_error("insufficient memory");
+    auto data = new std::valarray<T>(n_elements);
     std::fill_n(std::begin(*data), n_elements, value);
 
     return data;
@@ -112,9 +102,9 @@ auto get_index(std::vector<std::size_t> *t_dims, std::vector<std::size_t> dims)
  *           [ 13,14, 15, 16 ]
  *           [ 17,18, 19, 20 ]
  *
- * start ids along the row, i.e 5, has 5 elements and are = 1, 5, 9, 13, 17
+ * start ids along the row with size of 4, are = 1, 5, 9, 13, 17
  *
- * start ids along the col i.e 4, has 4 elements and are = 1, 2, 3, 4
+ * start ids along the col with size of 5 are = 1, 2, 3, 4
  *
  * and this can be extended to more than 2D, N1xN2xN3x..xN,  N dimensions
  *
@@ -131,9 +121,9 @@ auto get_index(std::vector<std::size_t> *t_dims, std::vector<std::size_t> dims)
  *             [ 33, 34, 35, 36 ]
  *             [ 37, 38, 39, 40 ]]]
  *
- * start ids across the col, i.e 4, has 2*5 elements and are = 1, 5, 9, 13, 17, 21, 25, 29, 33, 37
- * start ids across the row i.e 5, has 2*4 elements and are = 1, 2, 3, 4, 21, 22, 23, 24
- * start ids across the batch, i.e 2 has 5*4 elements and are =  1,2,3,4,5,6,7,8,9,....,19,20
+ * start ids across the col with size of 4, has 2*5 elements and are = 1, 5, 9, 13, 17, 21, 25, 29, 33, 37
+ * start ids across the row with size of 5, has 2*4 elements and are = 1, 2, 3, 4, 21, 22, 23, 24
+ * start ids across the batch with size of 2 has 5*4 elements and are =  1,2,3,4,5,6,7,8,9,....,19,20
  */
 
 inline std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>> generate_idxs(const std::vector<std::size_t> tdims, int dim)
@@ -157,6 +147,13 @@ inline std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>> genera
     return {strides, idxs};
 }
 
+// https://en.cppreference.com/w/cpp/locale/numpunct/truefalsename
+struct custom_tf : std::numpunct<char>
+{
+    std::string do_truename() const { return {"True"}; }
+    std::string do_falsename() const { return {"False"}; }
+};
+
 /**
  * @brief create a formatted string rep of an ND vector with the given dims
  *
@@ -166,16 +163,21 @@ inline std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>> genera
  * @return stringstream object(type std::stringstream)
  */
 template <class T>
-std::stringstream printND(std::valarray<T> nd_data, std::vector<std::size_t> shape)
+std::stringstream printND(std::valarray<T> *nd_data, std::vector<std::size_t> shape)
 {
-    int n_elements = nd_data.size();
+    int n_elements = nd_data->size();
+    const bool isBool = *typeid(T).name() == 'b';
     std::stringstream out;
     out.setf(std::numeric_limits<T>::digits10);
+    int MAX_WIDTH;
+    if (isBool)
+        MAX_WIDTH = 4;
+    else
+        MAX_WIDTH = std::to_string(nd_data->max()).length();
     std::string dl(shape.size(), '[');
     out << dl;
     auto [strides, idxs] = generate_idxs(shape, shape.size() - 1);
     strides[shape.size() - 1] = strides[0] * shape[0];
-    auto MAX_WIDTH = std::to_string(nd_data.max()).length();
     for (auto i = 0; auto idx : idxs)
     {
         if (i != n_elements && i != 0)
@@ -187,14 +189,27 @@ std::stringstream printND(std::valarray<T> nd_data, std::vector<std::size_t> sha
             out.width(shape.size() + 1);
             out << dfl;
         }
-        std::valarray<T> sl = nd_data[std::slice(idx, shape[shape.size() - 1], 1)];
-        out.width(MAX_WIDTH - 1);
-        out << std::setprecision(4) << std::right << sl[0];
+        std::valarray<T> sl = (*nd_data)[std::slice(idx, shape[shape.size() - 1], 1)];
+        if (isBool)
+        {
+            out.setf(std::ios_base::boolalpha);
+            out.setf(std::ios_base::skipws);
+            out.imbue(std::locale(std::cout.getloc(), new custom_tf));
+        }
+        out << std::setprecision(4);
+        out.width(MAX_WIDTH-1); out<<std::right;
+        out << sl[0];
         std::for_each(std::begin(sl) + 1, std::end(sl), [&](T n)
                       { 
-            out<<",";
+            out<<std::left<<",";
+            out<<std::setprecision(4);
             out.width(MAX_WIDTH+1);
-            out<<std::setprecision(4)<<std::right<<n; });
+            out<<std::right;
+            out<<n; });
+        out.unsetf(std::ios_base::left);
+        out.unsetf(std::ios_base::right);
+        out.unsetf(std::ios_base::skipws);
+        out.width(0);
         out << " ";
         i++;
     }
@@ -203,13 +218,7 @@ std::stringstream printND(std::valarray<T> nd_data, std::vector<std::size_t> sha
 
     return out;
 };
-template <class T>
-void CHECK_DEVICE(const std::shared_ptr<T> &lhs, const std::shared_ptr<T> &rhs)
-{
-    assertm(lhs->get_device() == rhs->get_device(), "tensors are on different devices");
-    if (lhs->get_device() != rhs->get_device())
-        throw std::runtime_error("tensors are on different devices");
-};
+
 template <class T>
 void CHECK_BACKWARD(const std::vector<std::shared_ptr<T>> &var, int expected = 1)
 {
@@ -238,7 +247,7 @@ template <class T>
 void CHECK_ARGS_IN_PLACE_OPS(const std::shared_ptr<T> &lhs)
 {
     assertm(lhs->requires_grad == false, ERROR_IN_PLACE_OP_LEAF);
-    if (lhs->require_grad())
+    if (lhs->requires_grad())
         throw std::runtime_error(ERROR_IN_PLACE_OP_LEAF);
 };
 
@@ -284,7 +293,7 @@ inline void CHECK_SIZE(std::vector<size_t> dims, int n_elements)
 }
 
 // https://pytorch.org/docs/stable/notes/broadcasting.html  check if tensors are "broadcastable"
-inline void CHECK_ARGS_OPS(const std::vector<size_t> dims, const std::vector<size_t> tdims)
+inline void CHECK_ARGS_OPS_BROADCAST(const std::vector<size_t> dims, const std::vector<size_t> tdims)
 {
     for (int i = -1; i >= -std::min(dims.size(), tdims.size()); i--)
     {
@@ -335,5 +344,90 @@ inline void CHECK_VALID_RANGE(const int &dim, const int &rank, const int &low = 
     assertm(dim == INT_MAX || low <= dim < rank, ERROR_OUT_OF_BOUND_DIM);
     if (dim != INT_MAX && (dim >= rank || dim < low))
         throw std::runtime_error(ERROR_OUT_OF_BOUND_DIM);
+}
+
+inline void CHECK_EQUAL_SIZES(const std::vector<size_t> dims1, const std::vector<size_t> dims2)
+{
+    const bool isValid = dims1.size() == dims2.size() && std::equal(dims1.begin(), dims1.end(), dims2.begin());
+    if (!isValid)
+        throw std::runtime_error("invalid op, tensors sizes must be the same");
+}
+
+template <class T>
+std::valarray<T> *repeat_nd(std::valarray<T> *d, const std::vector<size_t> &dims, const std::unordered_map<int, std::size_t> n_repeat)
+{
+    int n_elements = std::accumulate(dims.begin(), dims.end(), 1, std::multiplies<int>());
+    auto out_data = new std::valarray<T>(n_elements);
+
+    for (const auto &[dim, n] : n_repeat)
+    {
+        const auto &[strides, idxs] = generate_idxs(dims, dim);
+        for (int i = 0; const auto &id : idxs)
+            (*out_data)[std::slice(id, n, strides[dim])] = (*d)[i++ % d->size()];
+    }
+
+    return out_data;
+}
+
+bool is_broadcastable(const std::vector<size_t> &dims, const std::vector<size_t> &tdims)
+{
+    for (int i = -1; i >= -std::min(dims.size(), tdims.size()); i--)
+    {
+        if (std::min(dims[dims.size() + i], tdims[tdims.size() + i]) != 1 && tdims[tdims.size() + i] != dims[dims.size() + i])
+            return false;
+    }
+    return true;
+}
+
+// https://numpy.org/doc/stable/user/basics.broadcasting.html
+// https://pytorch.org/docs/stable/notes/broadcasting.html
+template <class T>
+void broadcast(std::valarray<T> *lhs, std::vector<size_t> lhs_dims, std::valarray<T> *rhs, std::vector<size_t> rhs_dims, std::vector<size_t> *new_dims)
+{
+    int n_dims = std::max(rhs_dims.size(), lhs_dims.size());
+    std::unordered_map<int, size_t> n_repeat_lhs, n_repeat_rhs;
+
+    int i = -1;
+
+    while (i >= -n_dims)
+    {
+        size_t s, l, r;
+        int idx = n_dims + i;
+        if (std::abs(i) > rhs_dims.size() && idx < lhs_dims.size())
+        { // second condition not neccessary since rhs_dims<>lhs_dims
+            s = lhs_dims[idx];
+            n_repeat_rhs[idx] = s;
+            rhs_dims.insert(rhs_dims.begin(), s);
+        }
+        else if (std::abs(i) > lhs_dims.size())
+        {
+            s = rhs_dims[idx];
+            n_repeat_lhs[idx] = s;
+            lhs_dims.insert(lhs_dims.begin(), s);
+        }
+        else
+        {
+            r = rhs_dims.size() + i;
+            l = lhs_dims.size() + i;
+            s = std::max(lhs_dims[l], rhs_dims[r]);
+            if (lhs_dims[l] != rhs_dims[r])
+                lhs_dims[l] > rhs_dims[r] ? n_repeat_rhs[r] = s : n_repeat_lhs[l] = s;
+            lhs_dims[l] = s;
+            rhs_dims[r] = s;
+        }
+        i--;
+    }
+    *new_dims = rhs_dims;
+
+    if (!n_repeat_lhs.empty())
+    {
+        auto temp_lhs = repeat_nd(lhs, lhs_dims, n_repeat_lhs);
+        *lhs = *temp_lhs;
+    }
+    if (!n_repeat_rhs.empty())
+    {
+        auto temp_rhs = repeat_nd(rhs, rhs_dims, n_repeat_rhs);
+        *rhs = *temp_rhs;
+    }
 }
 #endif
