@@ -12,10 +12,6 @@ namespace cyg
 
 }
 /**
- * operations without backprop
- * 
- * always clone tensors input
- * use tensors with req_grad set to false when you have to execute ops on tensors
  */
 namespace functional
 {
@@ -28,11 +24,9 @@ namespace functional
     {
 
         std::vector<size_t> new_dims;
-        
         std::valarray<int> id_data;
 
         auto input_data = (*input_tensor->data());
-
         auto max_values = new std::valarray<T>(1);
         auto max_idxs = new std::valarray<int>(1);
 
@@ -69,13 +63,11 @@ namespace functional
             if (!keepdim)
                 new_dims.erase(new_dims.begin() + dim);
         }
-        auto value_tensor = std::make_shared<cyg::tensor<T>>(new_dims, max_values, false, false);
-        auto indices_tensor = std::make_shared<cyg::tensor<int>>(new_dims, max_idxs, false, false);
+        auto value_tensor = std::make_shared<cyg::tensor<T>>(new_dims, max_values, false);
+        auto indices_tensor = std::make_shared<cyg::tensor<int>>(new_dims, max_idxs, false);
 
         return {value_tensor, indices_tensor};
     }
-
-
     /**
      * computes elements wise maximum of the given tensors
      * tensors sizes must be the same
@@ -94,7 +86,7 @@ namespace functional
             (*out_data)[i] = std::max(t1data[i], t2data[i]);
         }
 
-        return std::make_shared<cyg::tensor<T>>(tensor1->shape(), out_data, false, false);
+        return std::make_shared<cyg::tensor<T>>(tensor1->shape(), out_data, false);
     }
 
     /**
@@ -103,7 +95,7 @@ namespace functional
     template<class T>
     std::shared_ptr<cyg::tensor<T>> maximum(const std::shared_ptr<cyg::tensor<T>>& tensor1, const T value){
 
-        return maximum<T>(tensor1, std::make_shared<cyg::tensor<T>>(tensor1->shape(), static_cast<T>(value), false, false));
+        return maximum<T>(tensor1, std::make_shared<cyg::tensor<T>>(tensor1->shape(), static_cast<T>(value), false));
     }
 
     template<class T>
@@ -135,7 +127,7 @@ namespace functional
     template<class T>
     std::shared_ptr<cyg::tensor<T>> minimum(const std::shared_ptr<cyg::tensor<T>>& tensor1, const T value){
 
-        return minimum<T>(tensor1, std::make_shared<cyg::tensor<T>>(tensor1->shape(), static_cast<T>(value), false, false));
+        return minimum<T>(tensor1, std::make_shared<cyg::tensor<T>>(tensor1->shape(), static_cast<T>(value), false));
     }
 
     template<class T>
@@ -152,7 +144,7 @@ namespace functional
         *new_data = *t1data>*t2data;
         delete t1data; delete t2data;
 
-        return std::make_shared<cyg::tensor<bool>>(*new_dims, new_data, false, false);
+        return std::make_shared<cyg::tensor<bool>>(*new_dims, new_data, false);
     }
     
     template<class T>
@@ -173,7 +165,7 @@ namespace functional
             *out_data = *lhs->data() + *rhs->data();
             *new_dims = lhs->shape();
         }
-        auto output = std::make_shared<cyg::tensor<T>>(*new_dims, out_data, req_grad, false);
+        auto output = std::make_shared<cyg::tensor<T>>(*new_dims, out_data, req_grad);
         delete new_dims;
         return output;
     }
@@ -197,7 +189,7 @@ namespace functional
             *new_dims = lhs->shape();
         }
         
-        auto output = std::make_shared<cyg::tensor<T>>(*new_dims, out_data, req_grad, false);
+        auto output = std::make_shared<cyg::tensor<T>>(*new_dims, out_data, req_grad);
         delete new_dims;
         return output;
     }
@@ -220,7 +212,7 @@ namespace functional
             *new_dims = numerator->shape();
         }
         
-        auto output = std::make_shared<cyg::tensor<T>>(*new_dims, out_data, req_grad, false);
+        auto output = std::make_shared<cyg::tensor<T>>(*new_dims, out_data, req_grad);
         delete new_dims;
         return output;
     }
@@ -243,7 +235,7 @@ namespace functional
             *new_dims = base->shape();
         }
         
-        auto output = std::make_shared<cyg::tensor<T>>( *new_dims, out_data, req_grad, false);
+        auto output = std::make_shared<cyg::tensor<T>>( *new_dims, out_data, req_grad);
 
         return output;
     }
@@ -275,7 +267,7 @@ namespace functional
             shape[dim] = 1;
             if (!keepdim) shape.erase(shape.begin() + dim);
         };
-        auto output = std::make_shared<cyg::tensor<T>>(shape, out_data, base->requires_grad(), false);
+        auto output = std::make_shared<cyg::tensor<T>>(shape, out_data, base->requires_grad());
 
         return output;
     };
@@ -297,7 +289,7 @@ namespace functional
         auto out_data = new std::valarray<T>();
         *out_data = std::exp(*base->data());
 
-        auto output = std::make_shared<cyg::tensor<T>>(base->shape(), out_data, base->requires_grad(), false);
+        auto output = std::make_shared<cyg::tensor<T>>(base->shape(), out_data, base->requires_grad());
 
         return output;
     };
@@ -308,7 +300,7 @@ namespace functional
         auto out_data = new std::valarray<T>();
         *out_data = std::log(*base->data());
 
-        auto output = std::make_shared<cyg::tensor<T>>(base->shape(), out_data, base->requires_grad(), false);
+        auto output = std::make_shared<cyg::tensor<T>>(base->shape(), out_data, base->requires_grad());
 
         return output;
     };
@@ -333,7 +325,7 @@ namespace functional
             (*out_data)[std::slice(col_idxs[i], n_ele, col_strides[std::max(d1, d2)])] = data[std::slice(row_idxs[i], n_ele, row_strides[std::min(d1, d2)])];
         }
 
-        auto output = std::make_shared<cyg::tensor<T>>(new_dims, out_data, t->requires_grad(), false);
+        auto output = std::make_shared<cyg::tensor<T>>(new_dims, out_data, t->requires_grad());
 
         return output;
     }
@@ -369,7 +361,7 @@ namespace functional
             if(!keepdim) shape.erase(shape.begin() + dim);
         }
 
-        return std::make_shared<cyg::tensor<T>>(shape, out_data, base->requires_grad(), false);
+        return std::make_shared<cyg::tensor<T>>(shape, out_data, base->requires_grad());
     }
 
     template <class T>
@@ -404,7 +396,7 @@ namespace functional
             (*out_data)[rdx] = (r_slice * l_slice).sum();
             ldx += ((rdx + 1) % rhs->shape()[rhs->rank() - 1]==0);
         }
-        auto out_tensor = std::make_shared<cyg::tensor<T>>(new_dims, out_data, lhs->requires_grad() || rhs->requires_grad(), false);
+        auto out_tensor = std::make_shared<cyg::tensor<T>>(new_dims, out_data, lhs->requires_grad() || rhs->requires_grad());
 
         return out_tensor;
     }
@@ -435,7 +427,14 @@ namespace functional
             (*out_data)[cond<=0.0f] = (*false_value->data())[cond<=0.0f];
 
         } 
-        return std::make_shared<cyg::tensor<T>>(*new_dims, out_data, req_grad, false);
+        return std::make_shared<cyg::tensor<T>>(*new_dims, out_data, req_grad);
+    };
+    template<class T>
+    std::shared_ptr<cyg::tensor<T>> softmax(const std::shared_ptr<cyg::tensor<T>> input_tensor, int dim){
+        auto sum_ = input_tensor->exp()->sum(dim, true);
+        auto output = (input_tensor - sum_->log())->exp();
+        output->grad_fn->name="SoftmaxOp";
+        return output;
     }
 }
 #endif

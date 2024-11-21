@@ -36,7 +36,7 @@ TEST_CASE("testing Add")
     auto lhs = cyg::randn(dims, -1, 1, true);
     auto rhs = cyg::randn(dims, -1, 1, true);
     auto res_vec = *lhs->data() + *rhs->data();
-    auto res = add->forward(lhs, rhs, true);
+    auto res = add->forward(lhs, rhs);
     valarray<float> diff1 = *res->data() - res_vec;
     CHECK(all_of(begin(diff1), end(diff1), compare));
     auto incoming_gradients = cyg::randn(res->shape());
@@ -52,7 +52,7 @@ TEST_CASE("testing Mul")
     auto lhs = cyg::randn(dims, -1, 1, true);
     auto rhs = cyg::randn(dims, -1, 1, true);
     auto res_vec = *lhs->data() * *rhs->data();
-    auto res = mul->forward(lhs, rhs, true);
+    auto res = mul->forward(lhs, rhs);
     valarray<float> diff1 = *res->data() - res_vec;
     CHECK(all_of(begin(diff1), end(diff1), compare));
     auto incoming_gradients = make_shared<tensor<float>>(dims, 2, false);
@@ -72,7 +72,7 @@ TEST_CASE("testing Div")
     auto numerator = cyg::randn(dims, -1, 1, true);
     auto denominator = cyg::randn(dims, -1, 1, true);
     auto res_vec = *numerator->data() / *denominator->data();
-    auto res = div->forward(numerator, denominator, true);
+    auto res = div->forward(numerator, denominator);
     valarray<float> diff1 = *res->data() - res_vec;
     CHECK(all_of(begin(diff1), end(diff1), compare));
     auto incoming_gradients = make_shared<tensor<float>>(dims, 2, false);
@@ -92,7 +92,7 @@ TEST_CASE("testing Pow")
     auto base = cyg::randn(dims, 3, 7, true);
     auto exponent = cyg::randn(dims, 1, 4, true);
     auto res_vec = std::pow(*base->data(), *exponent->data());
-    auto res = pow->forward(base, exponent, true); // prolly not the right way to do it, but i already checked the results with the torch equ
+    auto res = pow->forward(base, exponent); // prolly not the right way to do it, but i already checked the results with the torch equ
     valarray<float> diff = *res->data() - res_vec;
     CHECK(all_of(begin(diff), end(diff), compare));
     auto incoming_gradients = make_shared<tensor<float>>(dims, 1, false);
@@ -115,14 +115,14 @@ TEST_CASE("testing Mean")
     auto base = cyg::randn(dims, 1, 3, true);
 
     int d = 0;
-    auto res1 = m->forward(base, d, false, true);
+    auto res1 = m->forward(base, d, false);
     auto res_t = functional::sum(base, d);
     std::valarray<float> diff = *res1->data() - (*(res_t / base->shape()[d])->data());
     // m->backward(cyg::randn(res1->shape()));
     CHECK(all_of(std::begin(diff), std::end(diff), compare));
 
     d = 1;
-    auto res2 = m->forward(base, d, false, true);
+    auto res2 = m->forward(base, d, false);
     auto res_t2 = functional::sum(base, d);
     std::valarray<float> diff2 = *res2->data() - (*(res_t2 / base->shape()[d])->data());
     CHECK(all_of(std::begin(diff2), std::end(diff2), compare));
@@ -139,7 +139,7 @@ TEST_CASE("testing Exp")
     auto e = make_shared<Exp<tensor<float>>>();
     vector<size_t> dims = {2, 3, 4};
     auto base = cyg::randn(dims, -1, 1, true);
-    auto res = e->forward(base, true);
+    auto res = e->forward(base);
     auto res_vec = std::exp(*base->data());
     valarray<float> diff = *res->data() - res_vec;
     CHECK(all_of(begin(diff), end(diff), compare));
@@ -150,7 +150,7 @@ TEST_CASE("testing Log")
     auto l = make_shared<Log<tensor<float>>>();
     vector<size_t> dims = {2, 3, 4};
     auto base = cyg::randn(dims, 1, 4, true);
-    auto res = l->forward(base, true);
+    auto res = l->forward(base);
     auto res_vec = std::log(*base->data());
     valarray<float> diff = *res->data() - res_vec;
     CHECK(all_of(begin(diff), end(diff), compare));
@@ -172,7 +172,7 @@ TEST_CASE("testing Sum")
     valarray<float> diff;
 
     auto res2 = m->forward(base, d, true);
-    auto incoming_gradients = make_shared<tensor<float>>(dims, 1, false, false);
+    auto incoming_gradients = make_shared<tensor<float>>(dims, 1, false);
     m->backward(incoming_gradients);
     m.reset();
     base.reset();
