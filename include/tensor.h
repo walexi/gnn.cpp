@@ -17,7 +17,7 @@
 #include <any>
 
 // TODO integrate cuda - thrust - focus on tensor._data and tensor._grad
-// TODO modify tensor ops to handle operands of different types // use deceltype(auto)
+// TODO modify tensor ops to handle operands of different types / use herogenous containers (boost, variant)
 namespace cyg
 {
 
@@ -267,10 +267,9 @@ namespace cyg
             }
             if (this->grad_fn != nullptr)
             {
-                std::cout<<*grad_fn<<"\n";
-                // std::cout<<*grad<<"\n";
+                // std::cout<<*grad_fn<<"\n";
                 this->grad_fn->backward(incoming_gradient);
-                this->grad_fn = nullptr;
+                // this->grad_fn = nullptr;
             }
         };
         /**
@@ -417,7 +416,6 @@ namespace cyg
 
             return output;
         };
-        // // template<class A> //heterogeneous containers
         /**
          * yield input where condition is true (non zero) otherwise yield other
          */
@@ -744,19 +742,10 @@ namespace cyg
                 this->repeat(this->rank() + j, dims[dims.size() + j]);
             }
         }
-        // tensor(tensor&& other);
-        // tensor& operator=(tensor&& other);
-        // disable copy constructor and copy assigment operator
-        // tensor(const tensor&);
-        // tensor& operator=(const tensor&);
-    protected:
         std::valarray<T> *_data = nullptr;
-        //@todo use smart ptr for _data and _grad
         std::vector<size_t> _dims;
         std::valarray<float> *_grad = nullptr;
         bool _requires_grad;
-
-    private:
         bool _enable_grad;
     };
 
@@ -771,7 +760,6 @@ namespace cyg
      *
      * @return generated tensor(type std::shared_ptr<tensor>)
      */
-    // template<class A>
     std::shared_ptr<tensor<float>> randn(std::vector<size_t> dims, int low = -1, int high = 1, bool requires_grad = false, bool enable_grad=true, float (*func)(std::default_random_engine) = nullptr)
     {
         assertm(low < high, "low must be lower than high, pls check your input params");
