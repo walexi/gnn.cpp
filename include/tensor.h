@@ -186,8 +186,8 @@ namespace cyg
         const int rank() const { return this->_dims.size(); };
         std::valarray<float> *grad()
         {
-            if (this->grad_fn != nullptr)
-                throw std::runtime_error(WARNING_GRAD_NOT_LEAF);
+            // if (this->grad_fn != nullptr)
+            //     throw std::runtime_error(WARNING_GRAD_NOT_LEAF);
             return this->_grad;
         };
         const bool requires_grad() const { return this->_requires_grad; };
@@ -251,7 +251,6 @@ namespace cyg
 
             if (incoming_gradient->numel() != this->numel())
                 throw std::runtime_error(ERROR_GRAD_MISMATCH);
-
             // auto grad = incoming_gradient->to_float();
             if (this->_grad != nullptr)
             {
@@ -259,6 +258,9 @@ namespace cyg
             }
             if (this->grad_fn != nullptr)
             {
+                // if(this->grad_fn->_done==false && this->numel()==1){
+                //     std::cout<<"trying to backprop on this node again, pls be sure this is intended"<<"\n";
+                // }
                 this->grad_fn->backward(incoming_gradient);
             }
         };
@@ -282,8 +284,12 @@ namespace cyg
             auto index = get_index(&this->_dims, dims);
             return (*this->_data)[index];
         };
-        T operator[](size_t dims); // index a 1D tensor
-                                   // std::valarray<T> operator()(int dims, ...);
+        auto& operator[](size_t dim) // index a 1D tensor
+        {
+            if(this->rank()!=1) throw std::runtime_error("tensor must be 1D");
+            if(dim>=this->numel()) throw std::runtime_error("invalid index");
+            return (*_data)[dim];
+        }
 
         /**
          * @brief addition operation for tensors, tensors must have equal shape
@@ -636,11 +642,24 @@ namespace cyg
             auto other_tensor = std::make_shared<tensor<T>>(this->_dims, static_cast<T>(other), false);
             return functional::gt(*this, *other_tensor);
         }
-        tptr<T> clone(const bool &require_grad = false) const
+        tptr<T> clone(const bool &require_grad = false, const T fillValue=INT_MAX) const
         {
             auto data = new std::valarray<T>();
-            *data = *this->_data;
+            if(fillValue!=INT_MAX) *data = fillValue;
+            else *data = *this->_data;
             return std::make_shared<tensor<T>>(this->_dims, data, require_grad);
+        }
+       
+        /**
+         * 1D tensor as input
+         */
+        tptr<T> slice(const tptr<int> &idx_tensor, int dim=-1)
+        {
+            CHECK_VALID_RANGE(dim, this->rank(), -this->rank());
+            auto sl_op = std::make_unique<Slice<tensor<T>>>();
+            auto output = sl_op->forward(this->shared_from_this(), idx_tensor, dim);
+            if(output->requires_grad()) output->grad_fn = std::move(sl_op);
+            return output;
         }
 
         void expand(const std::vector<size_t> &dims)

@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 3.11)
+project(gnn CXX)
+
+include(CTEST)
+enable_testing()
+
+if(NOT TARGET spdlog)
+    find_package(spdlog REQUIRED) #for logging
+endif()
+
+add_executable(gnn main.cpp)
+target_link_libraries(gnn PRIVATE spdlog::spdlog $<$<BOOL:${MINGW}>:ws2_32>)

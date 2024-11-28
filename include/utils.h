@@ -169,8 +169,9 @@ std::valarray<T> *repeat_nd(std::valarray<T> *d, const std::vector<size_t> &dims
     for (const auto &[dim, n] : n_repeat)
     {
         const auto &[strides, idxs] = generate_idxs(dims, dim);
-        for (int i = 0; const auto &id : idxs)
+        for (int i = 0; const auto &id : idxs){
             (*out_data)[std::slice(id, n, strides[dim])] = (*d)[i++ % d->size()];
+        }
     }
 
     return out_data;

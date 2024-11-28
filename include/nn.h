@@ -263,12 +263,11 @@ namespace nn
         };
         float p;
     };
-    template<class T>
-    std::shared_ptr<cyg::tensor<T>> softmax(const std::shared_ptr<cyg::tensor<T>> &input_tensor, int dim){
+    std::shared_ptr<cyg::tensor<float>> softmax(const std::shared_ptr<cyg::tensor<float>> &input_tensor, int dim){
 
         auto sum_ = input_tensor->exp()->sum(dim, true);
         auto output = (input_tensor - sum_->log())->exp(); //numerical stability
-        output->grad_fn->name="SoftmaxOp";
+        if(output->grad_fn) output->grad_fn->name="SoftmaxOp";
 
         return output;
     }
@@ -368,14 +367,14 @@ namespace nn
         auto n = shifted_x->exp() - (-shifted_x)->exp();
         auto d = shifted_x->exp() + (-shifted_x)->exp();
         auto output = n/d;
-        output->grad_fn->name = "Tanh";
+        if(output->grad_fn) output->grad_fn->name = "Tanh";
         return output;
     }
 
      std::shared_ptr<cyg::tensor<float>> sigmoid(const std::shared_ptr<cyg::tensor<float>> &x){
         auto shifted_x = x + 1e-12;
-        auto output = (-shifted_x->exp() + 1)->pow(-1);
-        output->grad_fn->name = "sigmoid";
+        auto output = (-shifted_x->exp() + 1.0f)->pow(-1);
+        if(output->grad_fn) output->grad_fn->name = "sigmoid";
         return output;
     };
 
@@ -447,24 +446,29 @@ namespace nn
 
     // sgd with momentum
     // see 4.1 of https://arxiv.org/pdf/1609.04747
+    // https://pytorch.org/docs/stable/generated/torch.optim.SGD.html
     class SGD : Optimizer
     {
         public:
-            SGD(std::vector<tptr<float>> parameters, float lr): Optimizer(parameters), _lr(lr){
-                for(const auto& p: _parameters){
-                    _velocity.push_back(std::valarray<float>(p->numel(), 0));
-                }
-            }
+            SGD(std::vector<tptr<float>> parameters, float lr, float momentum=0, float dampening=0, float weight_decay=0, bool nestorov=false): Optimizer(parameters), _lr(lr), _momentum(momentum), _dampening(dampening), _weight_decay(weight_decay), _nestorov(nestorov){}
             void step(){
                 for(auto i = 0; i<_parameters.size();i++){
                     auto p = _parameters[i];
-                    _velocity[i] += (_lr * *p->grad());
+                    auto g_t = *p->grad();
+                    if(_weight_decay!=0) g_t += (_weight_decay * *p->data());
+                    if(_momentum!=0){
+                        if(i>1) _velocity[i] = _momentum * _velocity[i] + (1-_dampening)*g_t;
+                        else _velocity[i] = g_t; // torch initialize velocity to the gradients instead of zeros
+                        if(_nestorov) g_t += _momentum*_velocity[i];
+                        else g_t = _velocity[i];
+                    }
                     std::valarray<float> ds = (*p->data()) - _velocity[i];
                     p->set_data(&ds);
                 }
             }
         
-        float _lr;
+        float _lr, _dampening, _momentum, _weight_decay;
+        bool _nestorov;
         std::vector<std::valarray<float>> _velocity;
     };
     // see chapter 4.6
@@ -492,5 +496,17 @@ namespace nn
         float _lr, _b1, _b2, _eps;
         std::vector<std::valarray<float>> _velocity, _momentum;
     };
+    // https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
+    // logits = N * C   targets = N
+    std::shared_ptr<cyg::tensor<float>> cross_entropy_loss(const std::shared_ptr<cyg::tensor<float>> logits, const std::shared_ptr<cyg::tensor<int>> target){
+        if(logits->rank()!=2 || target->rank()!=1) throw std::runtime_error("invalid input, logits must be of rank 2 and targets must be 1D tensor");
+        auto x_n = logits->slice(target, -1); // N
+        auto logits_exp = logits->exp();
+        auto out = x_n->exp() / logits_exp->sum(-1);  // N / N => N
+        out = -(out->log()); // N
+        out = out->sum() / out->numel();
+        out->grad_fn->name="CrossEntropy";
+        return out;
+    }
 }
 #endif
