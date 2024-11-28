@@ -21,29 +21,28 @@
 namespace cyg
 {
 
-
     template <class T>
     class tensor : public std::enable_shared_from_this<tensor<T>>
     {
-            template <class A>
-    using tptr = std::shared_ptr<tensor<A>>;
+        template <class A>
+        using tptr = std::shared_ptr<tensor<A>>;
 
-        template<class A>
-        friend tptr<T> operator+(tptr<T> lhs, const A& rhs) { return lhs->add(rhs); };
-        template<class A>
-        friend tptr<T> operator+=(tptr<T> lhs, const A& rhs)
+        template <class A>
+        friend tptr<T> operator+(tptr<T> lhs, const A &rhs) { return lhs->add(rhs); };
+        template <class A>
+        friend tptr<T> operator+=(tptr<T> lhs, const A &rhs)
         {
             CHECK_ARGS_IN_PLACE_OPS(lhs);
             auto out = lhs + rhs;
             lhs->set_data(out->data());
             return lhs;
         };
-        
+
         friend tptr<T> operator-(const tptr<T> &lhs) { return lhs->mul(-1); };
-        template<class A>
-        friend tptr<T> operator-(tptr<T> lhs, const A& rhs) { return lhs->add(-rhs); };
-        template<class A>
-        friend tptr<T> operator-=(tptr<T> lhs, const A& rhs)
+        template <class A>
+        friend tptr<T> operator-(tptr<T> lhs, const A &rhs) { return lhs->add(-rhs); };
+        template <class A>
+        friend tptr<T> operator-=(tptr<T> lhs, const A &rhs)
         {
             CHECK_ARGS_IN_PLACE_OPS(lhs);
             auto out = lhs - rhs;
@@ -144,9 +143,7 @@ namespace cyg
 
             if (this->_requires_grad)
                 this->zero_grad();
-            // this->grad_fn = nullptr;
         }
-        // TODO use cast operator
         template <class A>
         operator tensor<A>() const
         {
@@ -163,7 +160,6 @@ namespace cyg
         }
         std::shared_ptr<tensor<int>> to_int()
         {
-            // std::cout<<typeid(T).name()<<"\n";
             if (typeid(T) == typeid(int &))
                 return this->shared_from_this();
             return std::make_shared<tensor<int>>((tensor<int>)(*this));
@@ -251,7 +247,7 @@ namespace cyg
 
             if (incoming_gradient->numel() != this->numel())
                 throw std::runtime_error(ERROR_GRAD_MISMATCH);
-            // auto grad = incoming_gradient->to_float();
+
             if (this->_grad != nullptr)
             {
                 *this->_grad += *incoming_gradient->data();
@@ -284,10 +280,12 @@ namespace cyg
             auto index = get_index(&this->_dims, dims);
             return (*this->_data)[index];
         };
-        auto& operator[](size_t dim) // index a 1D tensor
+        auto &operator[](size_t dim) // index a 1D tensor
         {
-            if(this->rank()!=1) throw std::runtime_error("tensor must be 1D");
-            if(dim>=this->numel()) throw std::runtime_error("invalid index");
+            if (this->rank() != 1)
+                throw std::runtime_error("tensor must be 1D");
+            if (dim >= this->numel())
+                throw std::runtime_error("invalid index");
             return (*_data)[dim];
         }
 
@@ -302,7 +300,8 @@ namespace cyg
             CHECK_ARGS_OPS_BROADCAST(this->shape(), other->shape());
             auto add_op = std::make_unique<cyg::Add<tensor<T>>>();
             auto output = add_op->forward(this->shared_from_this(), other);
-            if(output->requires_grad()) output->grad_fn = std::move(add_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(add_op);
             return output;
         };
         template <class A>
@@ -322,7 +321,8 @@ namespace cyg
             CHECK_ARGS_OPS_BROADCAST(this->shape(), other->shape());
             auto mul_op = std::make_unique<cyg::Mul<tensor<T>>>();
             auto output = mul_op->forward(this->shared_from_this(), other);
-            if(output->requires_grad()) output->grad_fn = std::move(mul_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(mul_op);
             return output;
         };
         template <class A>
@@ -337,7 +337,8 @@ namespace cyg
             CHECK_MM_DIMS(this->shape(), other->shape());
             auto mat_mul_op = std::make_unique<cyg::MatMul<tensor<T>>>();
             auto output = mat_mul_op->forward(this->shared_from_this(), other);
-            if(output->requires_grad()) output->grad_fn = std::move(mat_mul_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(mat_mul_op);
 
             return output;
         };
@@ -353,7 +354,8 @@ namespace cyg
             CHECK_ARGS_OPS_BROADCAST(this->shape(), other->shape());
             auto div_op = std::make_unique<cyg::Div<tensor<T>>>();
             auto output = div_op->forward(this->shared_from_this(), other);
-            if(output->requires_grad()) output->grad_fn = std::move(div_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(div_op);
 
             return output;
         };
@@ -373,7 +375,8 @@ namespace cyg
             CHECK_ARGS_OPS_BROADCAST(this->shape(), exponent->shape());
             auto pow_op = std::make_unique<cyg::Pow<tensor<T>>>();
             auto output = pow_op->forward(this->shared_from_this(), exponent);
-            if(output->requires_grad()) output->grad_fn = std::move(pow_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(pow_op);
             if (inplace)
             {
                 CHECK_ARGS_IN_PLACE_OPS(this->shared_from_this());
@@ -394,7 +397,8 @@ namespace cyg
             CHECK_ARGS_OPS_BROADCAST(this->shape(), other->shape());
             auto mask_op = std::make_unique<Mask<tensor<T>>>();
             auto output = mask_op->forward(bool_tensor->to_float(), this->shared_from_this(), other);
-            if(output->requires_grad()) output->grad_fn = std::move(mask_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(mask_op);
             return output;
         }
         tptr<T> where(const std::shared_ptr<tensor<bool>> &bool_tensor, const float &other)
@@ -425,7 +429,8 @@ namespace cyg
         {
             auto exp_op = std::make_unique<cyg::Exp<tensor<T>>>();
             auto output = exp_op->forward(this->shared_from_this());
-            if(output->requires_grad()) output->grad_fn = std::move(exp_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(exp_op);
             if (inplace)
             {
                 delete this->_data;
@@ -454,7 +459,8 @@ namespace cyg
                 this->_dims = output->shape();
                 return this->shared_from_this();
             }
-            if(output->requires_grad()) output->grad_fn = std::move(log_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(log_op);
             return output;
         };
 
@@ -482,7 +488,8 @@ namespace cyg
                 this->_dims = output->shape();
                 return this->shared_from_this();
             }
-            if(output->requires_grad()) output->grad_fn = std::move(mean_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(mean_op);
 
             return output;
         };
@@ -503,13 +510,14 @@ namespace cyg
             auto sum_op = std::make_unique<cyg::Sum<tensor<T>>>();
             auto output = sum_op->forward(this->shared_from_this(), dim, keepdim);
             if (inplace)
-                {
-                    delete this->_data;
-                    this->_data = output->data();
-                    this->_dims = output->shape();
-                    return this->shared_from_this();
-                }
-            if(output->requires_grad()) output->grad_fn = std::move(sum_op);
+            {
+                delete this->_data;
+                this->_data = output->data();
+                this->_dims = output->shape();
+                return this->shared_from_this();
+            }
+            if (output->requires_grad())
+                output->grad_fn = std::move(sum_op);
 
             return output;
         };
@@ -526,7 +534,8 @@ namespace cyg
                 this->_dims = output->shape();
                 return this->shared_from_this();
             }
-            if(output->requires_grad()) output->grad_fn = std::move(tr_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(tr_op);
 
             return output;
         };
@@ -544,7 +553,8 @@ namespace cyg
                 this->_dims = output->shape();
                 return this->shared_from_this();
             }
-            if(output->requires_grad()) output->grad_fn = std::move(var_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(var_op);
 
             return output;
         }
@@ -642,23 +652,26 @@ namespace cyg
             auto other_tensor = std::make_shared<tensor<T>>(this->_dims, static_cast<T>(other), false);
             return functional::gt(*this, *other_tensor);
         }
-        tptr<T> clone(const bool &require_grad = false, const T fillValue=INT_MAX) const
+        tptr<T> clone(const bool &require_grad = false, const T fillValue = INT_MAX) const
         {
             auto data = new std::valarray<T>();
-            if(fillValue!=INT_MAX) *data = fillValue;
-            else *data = *this->_data;
+            if (fillValue != INT_MAX)
+                *data = fillValue;
+            else
+                *data = *this->_data;
             return std::make_shared<tensor<T>>(this->_dims, data, require_grad);
         }
-       
+
         /**
          * 1D tensor as input
          */
-        tptr<T> slice(const tptr<int> &idx_tensor, int dim=-1)
+        tptr<T> slice(const tptr<int> &idx_tensor, int dim = -1)
         {
             CHECK_VALID_RANGE(dim, this->rank(), -this->rank());
             auto sl_op = std::make_unique<Slice<tensor<T>>>();
             auto output = sl_op->forward(this->shared_from_this(), idx_tensor, dim);
-            if(output->requires_grad()) output->grad_fn = std::move(sl_op);
+            if (output->requires_grad())
+                output->grad_fn = std::move(sl_op);
             return output;
         }
 
@@ -678,15 +691,15 @@ namespace cyg
                 this->repeat(this->rank() + j, dims[dims.size() + j]);
             }
         }
-        
-        protected:
-            std::valarray<T> *_data = nullptr;
-            std::vector<size_t> _dims;
-            std::valarray<float> *_grad = nullptr;
-            bool _requires_grad;
-            bool _enable_grad;
+
+    protected:
+        std::valarray<T> *_data = nullptr;
+        std::vector<size_t> _dims;
+        std::valarray<float> *_grad = nullptr;
+        bool _requires_grad;
+        bool _enable_grad;
     };
-    
+
     template <class A>
     using tptr = std::shared_ptr<tensor<A>>;
 
@@ -760,27 +773,31 @@ namespace cyg
     {
         return std::make_shared<tensor<int>>(input_tensor->shape(), 0, requires_grad);
     };
-
-    template<class T>
-    void no_grad(std::vector<tptr<T>> ts, const bool& requires_grad)
+    /**
+     * @brief enable/disbale grad for input tensors, similar to with torch.no_grad();
+     *  no_grad(ts) => disbale grad
+     * @TODO move to operation, save state of input tensors
+     */
+    template <class T>
+    void no_grad(std::vector<tptr<T>> ts)
     {
-        for(const auto& t:ts){
-            t->requires_grad_(!requires_grad);
+        for (const auto &t : ts)
+        {
+            t->requires_grad_(false);
         }
     }
-    // /**
-    //  * concatenates the input tensors along a new dimension
-    //  */
-    // template<class T>
-    // tptr<T> stack(const std::vector<tptr<T>> ts, int dim=0){
-    //     CHECK_CONCAT(ts);
-    //     CHECK_VALID_RANGE(dim, ts[0]->rank() , -ts[0]->rank());
-    //     auto stack_op = std::make_unique<Stack<tensor<T>>>();
-    //     auto output = stack_op->forward(ts, dim);
-    //     output->grad_fn = std::move(stack_op);
-    //     return output;
-    // }
-
+    /**
+     * concatenates the input tensors along a new dimension
+     */
+    template<class T>
+    tptr<T> stack(const std::vector<tptr<T>> ts, int dim=0){
+        CHECK_CONCAT(ts);
+        CHECK_VALID_RANGE(dim, ts[0]->rank() , -ts[0]->rank());
+        auto stack_op = std::make_unique<Stack<tensor<T>>>();
+        auto output = stack_op->forward(ts, dim);
+        if(output->requires_grad()) voutput->grad_fn = std::move(stack_op);
+        return output;
+    }
 
 }
 #endif
