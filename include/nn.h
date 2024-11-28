@@ -500,7 +500,7 @@ namespace nn
     // logits = N * C   targets = N
     std::shared_ptr<cyg::tensor<float>> cross_entropy_loss(const std::shared_ptr<cyg::tensor<float>> logits, const std::shared_ptr<cyg::tensor<int>> target){
         if(logits->rank()!=2 || target->rank()!=1) throw std::runtime_error("invalid input, logits must be of rank 2 and targets must be 1D tensor");
-        auto x_n = logits->slice(target, -1); // N
+        auto x_n = logits->slice(target); // N
         auto logits_exp = logits->exp();
         auto out = x_n->exp() / logits_exp->sum(-1);  // N / N => N
         out = -(out->log()); // N
