@@ -16,7 +16,7 @@
 #include <type_traits>
 #include <any>
 
-// TODO integrate cuda - thrust - focus on tensor._data and tensor._grad
+// TODO integrate cuda - thrust -  tensor._data and tensor._grad
 // TODO use herogenous containers (boost, variant)
 namespace cyg
 {
@@ -259,9 +259,7 @@ namespace cyg
             }
             if (this->grad_fn != nullptr)
             {
-                // std::cout<<*grad_fn<<"\n";
                 this->grad_fn->backward(incoming_gradient);
-                // this->grad_fn = nullptr;
             }
         };
         /**
