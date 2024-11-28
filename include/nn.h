@@ -485,17 +485,14 @@ namespace nn
         public:
             SGD(std::vector<tptr<float>> parameters, float lr): Optimizer(parameters), _lr(lr){
                 for(const auto& p: _parameters){
-                    auto n = new std::valarray<float>(p->numel(), 0);
-                    std::cout<<printND(n, p->shape()).str()<<"\n";
-                    _velocity.push_back(*n);
+                    _velocity.push_back(std::valarray<float>(p->numel(), 0));
                 }
             }
             void step(){
                 for(auto i = 0; i<_parameters.size();i++){
                     auto p = _parameters[i];
-                    // _velocity[i] += (_lr * *p->grad());
+                    _velocity[i] += (_lr * *p->grad());
                     std::valarray<float> ds = (*p->data()) - _velocity[i];
-                std::cout<<_parameters.size()<<"\n";
                     p->set_data(&ds);
                 }
             }
@@ -509,24 +506,24 @@ namespace nn
         public:
             Adam(std::vector<tptr<float>> parameters, float lr, float b1, float b2, float eps=10-8): Optimizer(parameters), _lr(lr), _b1(b1), _b2(b2), _eps(eps){
                 for(const auto& p : _parameters){
-                    _mean.push_back(std::valarray<float>(p->numel(), 0));
-                    _variance.push_back(std::valarray<float>(p->numel(), 0));
+                    _velocity.push_back(std::valarray<float>(p->numel(), 0));
+                    _momentum.push_back(std::valarray<float>(p->numel(), 0));
                 }
             }
             void step(){
                 for(auto i=0; i<_parameters.size();i++){
                     auto p = _parameters[i];
                     auto g = (*p->grad());
-                    _mean[i] = _b1*_mean[i] + (1-_b1)*g;
-                    _variance[i] = _b2*_variance[i] + (1-_b2)*std::pow(g, i+1);
-                    auto m_ = _mean[i]/(1-_b1);
-                    auto v_ = _variance[i]/(1-_b2);
+                    _momentum[i] = _b1*_momentum[i] + (1-_b1)*g;
+                    _velocity[i] = _b2*_velocity[i] + (1-_b2)*std::pow(g, 2);
+                    auto m_ = _momentum[i]/(1- std::pow(_b1, i+1));
+                    auto v_ = _velocity[i]/(1- std::pow(_b2, i+1));
                     std::valarray<float> dg = g - (_lr * m_)/(std::sqrt(v_)*_eps);
                     p->set_data(&dg);
                 }
             }
         float _lr, _b1, _b2, _eps;
-        std::vector<std::valarray<float>> _mean, _variance;
+        std::vector<std::valarray<float>> _velocity, _momentum;
     };
 }
 #endif
