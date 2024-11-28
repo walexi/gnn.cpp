@@ -428,40 +428,7 @@ namespace nn
                 return {o_t, h_t, c_t};
             };
     };
-    // input tensor = B, H_in (batch/samples, features)
-    // class LSTM: public Module{
-    //     public:
-    //         LSTM(size_t input_size, size_t hidden_size, size_t num_layers=1, bool bias=true, float dropout=0.0): Module(), _num_layers(num_layers), _hidden_size(hidden_size){
-    //                 register_module("l_1", new LSTM_Layer(input_size, hidden_size, bias));
-    //                 for(int i=0;i<num_layers-1;i++){
-    //                     register_module("l_" + std::to_string(i+1), new LSTM_Layer(hidden_size, hidden_size, bias));
-    //                     _dropout.push_back(Dropout(dropout));
-    //                 }
-    //         }
-    //         std::tuple<tptr<float>, tptr<float>, tptr<float>> operator()(std::tuple<tptr<float>, tptr<float>, tptr<float>> inputs){
-    //             return forward(inputs);
-    //         }
-    //         std::tuple<tptr<float>, tptr<float>, tptr<float>> forward( std::tuple<tptr<float>, tptr<float>, tptr<float>> inputs){
-    //             auto [x, h, c] = inputs;
-    //             std::vector<size_t> h_dim;
-    //             if(x->rank()>=3) h_dim = {_num_layers, x->shape()[-2], _hidden_size};
-    //             else h_dim = {_num_layers, _hidden_size};
-    //             if(h==nullptr) h = make_shared<cyg::tensor<float>>(h_dim, 0.0, true);
-    //             if(c==nullptr) c = make_shared<cyg::tensor<float>>(h_dim, 0.0, true);
-    //             auto h_0 = (*h)(0, INT_MAX, INT_MAX);
-    //             auto [o_t, h_t, c_t] = _modules[0].second->forward({x, h_0, c});
-    //             for (auto i = 0; i< _num_layers-1; i++)
-    //             {
-    //                 o_t = _dropout[i](h_t);
-    //                 std::tie(o_t, h_t, c_t)  = _modules[i+1].second->forward({ o_t, h_t, c_t });
-    //             }
-                
-    //             return {o_t, h_t, c_t};
-    //         }
-
-    //     std::vector<Module> _dropout;
-    //     size_t _num_layers, _hidden_size;
-    // };
+    
     
     // https://arxiv.org/pdf/1609.04747
     class Optimizer
