@@ -373,7 +373,7 @@ namespace nn
 
      std::shared_ptr<cyg::tensor<float>> sigmoid(const std::shared_ptr<cyg::tensor<float>> &x){
         auto shifted_x = x + 1e-12;
-        auto output = (-shifted_x->exp() + 1.0f)->pow(-1);
+        auto output = (-shifted_x->exp() + 1)->pow(-1);
         if(output->grad_fn) output->grad_fn->name = "sigmoid";
         return output;
     };
@@ -395,37 +395,6 @@ namespace nn
                 return output;
             }
         int _dim;
-    };
-
-// https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html
-    class LSTM_Layer: public Module{
-        public:
-            LSTM_Layer(size_t h_in, size_t h_out, bool bias): Module(){
-                register_module("ii", new Linear(h_in, h_out, bias)); register_module("hi", new Linear(h_out, h_out, bias));
-                register_module("if", new Linear(h_in, h_out, bias)); register_module("hf", new Linear(h_out, h_out, bias));
-                register_module("ic", new Linear(h_in, h_out, bias)); register_module("hc", new Linear(h_out, h_out, bias));
-                register_module("io", new Linear(h_in, h_out, bias)); register_module("ho", new Linear(h_out, h_out, bias));
-            };
-
-            std::tuple<tptr<float>, tptr<float>, tptr<float>> forward( std::tuple<tptr<float>, tptr<float>, tptr<float>> inputs) override{
-                auto [x_t, ht_1, c_t_1] = inputs;
-                auto _ii = *((Linear*)(get_module("ii"))), _hi = *((Linear*)(get_module("hi"))), // input gate
-                _if = *((Linear*)(get_module("if"))), _hf = *((Linear*)(get_module("hf"))), // forget gate
-                _ic = *((Linear*)(get_module("ic"))), _hc = *((Linear*)(get_module("hc"))), // cell gate
-                _io = *((Linear*)(get_module("io"))), _ho = *((Linear*)(get_module("ho"))); // output gate
-                // x = N * H_in      h_0, c_0 = num_layers * N * H_out 
-                // h_t, c_t = N * H_out
-                // 1 * N * H_out = N * 1 * H_out
-                // (N * H_out) + (1 * N * H_out)  (batch_first=true)
-                // (N * H_out) + (1 * N * H_out) = (1 * N * H_out)
-                auto i_t = sigmoid(_ii(x_t) + _hi(ht_1)); 
-                auto f_t = sigmoid(_if(x_t) + _hf(ht_1)); // f_t = sigmoid( if(x) + hf(ht_1) )
-                auto c_t = tanh(_ic(x_t) + _hc(ht_1)); // g_t = tanh( ig(x) + hg(ht_1) )
-                auto o_t = sigmoid(_io(x_t) + _ho(ht_1)); // o_t = sigmoid( io(x) + ho(ht_1) )
-                c_t = (f_t * c_t_1) + (i_t * c_t); // N * L * H_out
-                auto h_t = o_t * tanh(c_t); // N * L * H_out
-                return {o_t, h_t, c_t};
-            };
     };
     
     
@@ -458,7 +427,7 @@ namespace nn
                     if(_weight_decay!=0) g_t += (_weight_decay * *p->data());
                     if(_momentum!=0){
                         if(i>1) _velocity[i] = _momentum * _velocity[i] + (1-_dampening)*g_t;
-                        else _velocity[i] = g_t; // torch initialize velocity to the gradients instead of zeros
+                        else _velocity[i] = g_t; // torch initializes velocity to the gradients instead of zeros
                         if(_nestorov) g_t += _momentum*_velocity[i];
                         else g_t = _velocity[i];
                     }
@@ -500,9 +469,9 @@ namespace nn
     // logits = N * C   targets = N
     std::shared_ptr<cyg::tensor<float>> cross_entropy_loss(const std::shared_ptr<cyg::tensor<float>> logits, const std::shared_ptr<cyg::tensor<int>> target){
         if(logits->rank()!=2 || target->rank()!=1) throw std::runtime_error("invalid input, logits must be of rank 2 and targets must be 1D tensor");
-        auto x_n = logits->slice(target); // N
+        auto x_n = logits->at(target); // N
         auto logits_exp = logits->exp();
-        auto out = x_n->exp() / logits_exp->sum(-1);  // N / N => N
+        auto out = x_n->exp() / (logits_exp->sum(-1) + 1e-20);  // N / N => N
         out = -(out->log()); // N
         out = out->sum() / out->numel();
         out->grad_fn->name="CrossEntropy";
