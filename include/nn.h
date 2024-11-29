@@ -25,19 +25,22 @@ namespace nn
     //             return this;
     //         }
     // };
+    using namespace std;
+
     template<class T>
-    using tptr = std::shared_ptr<cyg::tensor<T>>;
+    using tptr = shared_ptr<cyg::tensor<T>>;
+
 
     class Module
     {
     public:
         Module() {};
         bool training = true;
-        std::string name;
-        void register_module(std::string name, Module* module) { _modules.push_back({name, std::shared_ptr<Module>(module)}); }
-        void register_parameter(std::string name, tptr<float> p) 
+        string name;
+        void register_module(string name, Module* module) { _modules.push_back({name, shared_ptr<Module>(module)}); }
+        void register_parameter(string name, tptr<float> p) 
         {
-            if(!p->requires_grad() || p->grad_fn) throw std::runtime_error("cannot add tensor as param, tensor requires_grad must be set to true and tensor must be non-leaf - explicitly created");
+            if(!p->requires_grad() || p->grad_fn) throw runtime_error("cannot add tensor as param, tensor requires_grad must be set to true and tensor must be non-leaf - explicitly created");
             _parameters[name] = p; 
         }
         void zero_grad()
@@ -64,33 +67,33 @@ namespace nn
                 m->train(isTrain);
             }
         }
-        tptr<float> get_parameter(std::string name)
+        tptr<float> get_parameter(string name)
         {
             if (_parameters.find(name) == _parameters.end())
-                throw std::runtime_error("invalid input, no parameter with given name");
+                throw runtime_error("invalid input, no parameter with given name");
             
             return _parameters[name];
         }
-        Module* get_module(std::string name) const
+        Module* get_module(string name) const
         {
-            const auto it = std::find_if(_modules.begin(), _modules.end(), [&](const auto &p){ return std::get<0>(p)==name;});
+            const auto it = find_if(_modules.begin(), _modules.end(), [&](const auto &p){ return get<0>(p)==name;});
             if(it==_modules.end()){
-                throw std::runtime_error("invalid input, no mdule with given name");
+                throw runtime_error("invalid input, no mdule with given name");
             }
-            return std::get<1>(*it).get();
+            return get<1>(*it).get();
         }
         tptr<float> operator()(const tptr<float> &input_tensor) { return forward(input_tensor); };
         virtual tptr<float> forward(const tptr<float> &input_tensor) { 
-            throw std::runtime_error("not implemented");
+            throw runtime_error("not implemented");
         };
-        virtual std::tuple<tptr<float>, tptr<float>, tptr<float>> forward( std::tuple<tptr<float>, tptr<float>, tptr<float>> inputs){
-            throw std::runtime_error("not implemented");
+        virtual tuple<tptr<float>, tptr<float>, tptr<float>> forward( tuple<tptr<float>, tptr<float>, tptr<float>> inputs){
+            throw runtime_error("not implemented");
         }
         Module(const Module &m) : _parameters(m._parameters), _modules(m._modules) {}; // rule of three/five/zero
-        std::vector<std::pair<std::string, std::shared_ptr<Module>>> modules() const { return _modules; }
-        std::vector<tptr<float>> parameters(const bool& recurse=true) const 
+        vector<pair<string, shared_ptr<Module>>> modules() const { return _modules; }
+        vector<tptr<float>> parameters(const bool& recurse=true) const 
         {   
-            std::vector<tptr<float>> res;
+            vector<tptr<float>> res;
             if(_modules.size()==0) {
                 for(const auto& [n, p]: _parameters) res.push_back(p);
             };
@@ -107,11 +110,11 @@ namespace nn
         }
 
     protected:
-        std::vector<std::pair<std::string, std::shared_ptr<Module>>> _modules;
-        std::unordered_map<std::string, tptr<float>> _parameters;
+        vector<pair<string, shared_ptr<Module>>> _modules;
+        unordered_map<string, tptr<float>> _parameters;
     };
 
-    std::ostream &operator<<(std::ostream &out, const std::vector<size_t> input)
+    ostream &operator<<(ostream &out, const vector<size_t> input)
     {
         out << "(";
         for (int i = 0; i < input.size() - 1; i++)
@@ -121,7 +124,7 @@ namespace nn
         return out;
     };
 
-    // std::ostream &operator<<(std::ostream &out, const Module &module)
+    // ostream &operator<<(ostream &out, const Module &module)
     // {
     //     auto modules = module.modules();
     //     if (!modules.empty())
@@ -164,7 +167,7 @@ namespace nn
         Linear(size_t in_features, size_t out_features, bool bias = true) : Module(), _bias(bias), _in_features(in_features), _out_features(out_features)
         {
             this->name = "Linear";
-            std::vector<size_t> weight_feat{out_features, in_features}, bias_feat{out_features};
+            vector<size_t> weight_feat{out_features, in_features}, bias_feat{out_features};
             weight = make_shared<cyg::tensor<float>>(weight_feat, 1, true);
             register_parameter("weight", weight);
             if (_bias) {
@@ -177,7 +180,7 @@ namespace nn
         // https://arxiv.org/pdf/1502.01852
         void reset_parameters()
         {
-            const float bound = 1 / std::sqrt(_in_features);
+            const float bound = 1 / sqrt(_in_features);
             weight->uniform(-bound, bound);
             if (this->_bias)
                 bias->uniform(-bound, bound);
@@ -198,7 +201,7 @@ namespace nn
     {
     public:
         Sequential() : Module() {};
-        Sequential(std::vector<std::pair<std::string, Module*>> input) : Module()
+        Sequential(vector<pair<string, Module*>> input) : Module()
         { // can also use vector of tuples
             for (const auto &[n, m] : input)
                 register_module(n, m);
@@ -206,7 +209,7 @@ namespace nn
         tptr<float> forward(const tptr<float> &input_tensor)
         {
             auto output = (*_modules[0].second)(input_tensor);
-            for (auto m = std::next(_modules.begin()); m != _modules.end(); m++)
+            for (auto m = next(_modules.begin()); m != _modules.end(); m++)
             {
                 output = (*m->second)(output);
             }
@@ -235,7 +238,7 @@ namespace nn
     {
     public:
         Dropout(float p = 0.2) : Module(), p(p) {
-            if(p>1.0 || p<0.0) throw std::runtime_error("invalid input, prob should be between 0 and 1 (inclusive)");
+            if(p>1.0 || p<0.0) throw runtime_error("invalid input, prob should be between 0 and 1 (inclusive)");
             training = true;
             name="DropoutOp";
         };
@@ -249,11 +252,11 @@ namespace nn
              * give "true"(1) 1-p of the time 
              * give "false"(0) p of the time
              * */
-            std::bernoulli_distribution d(1-p);
-            auto mask_data = new std::valarray<bool>(input_tensor->numel());
-            std::default_random_engine e(time(nullptr));
+            bernoulli_distribution d(1-p);
+            auto mask_data = new valarray<bool>(input_tensor->numel());
+            default_random_engine e(time(nullptr));
 
-            std::generate(std::begin(*mask_data), std::end(*mask_data), [&]( ){ return d(e);});
+            generate(begin(*mask_data), end(*mask_data), [&]( ){ return d(e);});
             auto mask_tensor = make_shared<cyg::tensor<bool>>(input_tensor->shape(), mask_data);
             auto output = input_tensor->where(mask_tensor, 0.0f); // zero out neurons with prob of p (1-p in d)
             output = output / (1 - p); //scaled by 1/1-p
@@ -263,7 +266,7 @@ namespace nn
         };
         float p;
     };
-    std::shared_ptr<cyg::tensor<float>> softmax(const std::shared_ptr<cyg::tensor<float>> &input_tensor, int dim){
+    shared_ptr<cyg::tensor<float>> softmax(const shared_ptr<cyg::tensor<float>> &input_tensor, int dim){
 
         auto sum_ = input_tensor->exp()->sum(dim, true);
         auto output = (input_tensor - sum_->log())->exp(); //numerical stability
@@ -287,16 +290,16 @@ namespace nn
 
         public:
             BatchNorm(size_t num_features, float eps=1e-05, float momentum=0.1, bool affine=true, bool track_running_stats=true): Module(), _num_features(num_features), _eps(eps), _momentum(momentum), _affine(affine), _tracking_running_stats(track_running_stats) {
-                std::vector<size_t> dims = {1, num_features};
-                auto _gammas = std::make_shared<cyg::tensor<float>>(dims, 1, true);
+                vector<size_t> dims = {1, num_features};
+                auto _gammas = make_shared<cyg::tensor<float>>(dims, 1, true);
                 register_parameter("gammas", _gammas);
                 if (affine) {
-                    auto _betas = std::make_shared<cyg::tensor<float>>(dims, 0, true);
+                    auto _betas = make_shared<cyg::tensor<float>>(dims, 0, true);
                     register_parameter("betas", _betas);
                 }
                 if(_tracking_running_stats){
-                    _mean_avg = std::make_shared<cyg::tensor<float>>(dims, 0, false); //stats, no backprop
-                    _var_avg = std::make_shared<cyg::tensor<float>>(dims, 0, false);
+                    _mean_avg = make_shared<cyg::tensor<float>>(dims, 0, false); //stats, no backprop
+                    _var_avg = make_shared<cyg::tensor<float>>(dims, 0, false);
                 }
                 training = true;
                 name="BatchNormOp";
@@ -336,12 +339,12 @@ namespace nn
     class LayerNorm : public Module{
         public:
             LayerNorm(size_t normalized_shape, float eps=1e-05, bool elementwise_affine=true, bool bias=true): Module(), _normalized_shape(normalized_shape), _eps(eps), _elementwise_affine(elementwise_affine), _bias(bias){
-                std::vector<size_t> dims = {1, normalized_shape};
+                vector<size_t> dims = {1, normalized_shape};
                 if (elementwise_affine) {
-                    auto _gammas =  std::make_shared<cyg::tensor<float>>(dims, 1, true);
+                    auto _gammas =  make_shared<cyg::tensor<float>>(dims, 1, true);
                     register_parameter("gammas", _gammas);
                     if(_bias){
-                        auto _betas = std::make_shared<cyg::tensor<float>>(dims, 0, true);
+                        auto _betas = make_shared<cyg::tensor<float>>(dims, 0, true);
                         register_parameter("betas", _betas);
                     }
                 }
@@ -362,7 +365,7 @@ namespace nn
         bool _elementwise_affine, _bias;
     };
 
-    std::shared_ptr<cyg::tensor<float>> tanh(const std::shared_ptr<cyg::tensor<float>>& x){
+    shared_ptr<cyg::tensor<float>> tanh(const shared_ptr<cyg::tensor<float>>& x){
         auto shifted_x = x + 1e-12;
         auto n = shifted_x->exp() - (-shifted_x)->exp();
         auto d = shifted_x->exp() + (-shifted_x)->exp();
@@ -371,7 +374,7 @@ namespace nn
         return output;
     }
 
-     std::shared_ptr<cyg::tensor<float>> sigmoid(const std::shared_ptr<cyg::tensor<float>> &x){
+     shared_ptr<cyg::tensor<float>> sigmoid(const shared_ptr<cyg::tensor<float>> &x){
         auto shifted_x = x + 1e-12;
         auto output = (-shifted_x->exp() + 1)->pow(-1);
         if(output->grad_fn) output->grad_fn->name = "sigmoid";
@@ -402,14 +405,14 @@ namespace nn
     class Optimizer
     {
         public:
-            Optimizer(std::vector<tptr<float>> parameters): _parameters(parameters){}
+            Optimizer(vector<tptr<float>> parameters): _parameters(parameters){}
             void zero_grad(){
                 for(const auto& p:_parameters){
                     p->zero_grad();
                 }
             };
 
-        std::vector<tptr<float>> _parameters;
+        vector<tptr<float>> _parameters;
     };
 
 
@@ -419,7 +422,7 @@ namespace nn
     class SGD : Optimizer
     {
         public:
-            SGD(std::vector<tptr<float>> parameters, float lr, float momentum=0, float dampening=0, float weight_decay=0, bool nestorov=false): Optimizer(parameters), _lr(lr), _momentum(momentum), _dampening(dampening), _weight_decay(weight_decay), _nestorov(nestorov){}
+            SGD(vector<tptr<float>> parameters, float lr, float momentum=0, float dampening=0, float weight_decay=0, bool nestorov=false): Optimizer(parameters), _lr(lr), _momentum(momentum), _dampening(dampening), _weight_decay(weight_decay), _nestorov(nestorov){}
             void step(){
                 for(auto i = 0; i<_parameters.size();i++){
                     auto p = _parameters[i];
@@ -431,23 +434,23 @@ namespace nn
                         if(_nestorov) g_t += _momentum*_velocity[i];
                         else g_t = _velocity[i];
                     }
-                    std::valarray<float> ds = (*p->data()) - _velocity[i];
+                    valarray<float> ds = (*p->data()) - _velocity[i];
                     p->set_data(&ds);
                 }
             }
         
         float _lr, _dampening, _momentum, _weight_decay;
         bool _nestorov;
-        std::vector<std::valarray<float>> _velocity;
+        vector<valarray<float>> _velocity;
     };
     // see chapter 4.6
     class Adam : Optimizer
     {
         public:
-            Adam(std::vector<tptr<float>> parameters, float lr, float b1, float b2, float eps=10-8): Optimizer(parameters), _lr(lr), _b1(b1), _b2(b2), _eps(eps){
+            Adam(vector<tptr<float>> parameters, float lr, float b1, float b2, float eps=10-8): Optimizer(parameters), _lr(lr), _b1(b1), _b2(b2), _eps(eps){
                 for(const auto& p : _parameters){
-                    _velocity.push_back(std::valarray<float>(p->numel(), 0));
-                    _momentum.push_back(std::valarray<float>(p->numel(), 0));
+                    _velocity.push_back(valarray<float>(p->numel(), 0));
+                    _momentum.push_back(valarray<float>(p->numel(), 0));
                 }
             }
             void step(){
@@ -455,20 +458,20 @@ namespace nn
                     auto p = _parameters[i];
                     auto g = (*p->grad());
                     _momentum[i] = _b1*_momentum[i] + (1-_b1)*g;
-                    _velocity[i] = _b2*_velocity[i] + (1-_b2)*std::pow(g, 2);
-                    auto m_ = _momentum[i]/(1- std::pow(_b1, i+1));
-                    auto v_ = _velocity[i]/(1- std::pow(_b2, i+1));
-                    std::valarray<float> dg = g - (_lr * m_)/(std::sqrt(v_)*_eps);
+                    _velocity[i] = _b2*_velocity[i] + (1-_b2)*pow(g, 2);
+                    auto m_ = _momentum[i]/(1- pow(_b1, i+1));
+                    auto v_ = _velocity[i]/(1- pow(_b2, i+1));
+                    valarray<float> dg = g - (_lr * m_)/(sqrt(v_)*_eps);
                     p->set_data(&dg);
                 }
             }
         float _lr, _b1, _b2, _eps;
-        std::vector<std::valarray<float>> _velocity, _momentum;
+        vector<valarray<float>> _velocity, _momentum;
     };
     // https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
     // logits = N * C   targets = N
-    std::shared_ptr<cyg::tensor<float>> cross_entropy_loss(const std::shared_ptr<cyg::tensor<float>> logits, const std::shared_ptr<cyg::tensor<int>> target){
-        if(logits->rank()!=2 || target->rank()!=1) throw std::runtime_error("invalid input, logits must be of rank 2 and targets must be 1D tensor");
+    shared_ptr<cyg::tensor<float>> cross_entropy_loss(const shared_ptr<cyg::tensor<float>> logits, const shared_ptr<cyg::tensor<int>> target){
+        if(logits->rank()!=2 || target->rank()!=1) throw runtime_error("invalid input, logits must be of rank 2 and targets must be 1D tensor");
         auto x_n = logits->at(target); // N
         auto logits_exp = logits->exp();
         auto out = x_n->exp() / (logits_exp->sum(-1) + 1e-20);  // N / N => N
