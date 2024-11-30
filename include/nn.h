@@ -82,13 +82,19 @@ namespace nn
             }
             return get<1>(*it).get();
         }
-        tptr<float> operator()(const tptr<float> &input_tensor) { return forward(input_tensor); };
+        tptr<float> operator()(const tptr<float> &input_tensor, cyg::tensor<int>* y) { 
+            return forward(input_tensor, y); 
+        };
+
+        tptr<float> operator()(const tptr<float> &input_tensor) { 
+            return forward(input_tensor); 
+        };
         virtual tptr<float> forward(const tptr<float> &input_tensor) { 
             throw runtime_error("not implemented");
         };
-        virtual tuple<tptr<float>, tptr<float>, tptr<float>> forward( tuple<tptr<float>, tptr<float>, tptr<float>> inputs){
+        virtual tptr<float> forward(const tptr<float> &input_tensor, cyg::tensor<int>* y) { 
             throw runtime_error("not implemented");
-        }
+        };
         Module(const Module &m) : _parameters(m._parameters), _modules(m._modules) {}; // rule of three/five/zero
         vector<pair<string, shared_ptr<Module>>> modules() const { return _modules; }
         vector<tptr<float>> parameters(const bool& recurse=true) const 
@@ -185,7 +191,7 @@ namespace nn
             if (this->_bias)
                 bias->uniform(-bound, bound);
         }
-        virtual tptr<float> forward(const tptr<float> &input_tensor)
+        tptr<float> forward(const tptr<float> &input_tensor) override
         {
             auto output = input_tensor->mm(weight->transpose(-1, -2));
             if (_bias) return output + _bias;
@@ -206,7 +212,7 @@ namespace nn
             for (const auto &[n, m] : input)
                 register_module(n, m);
         };
-        tptr<float> forward(const tptr<float> &input_tensor)
+        tptr<float> forward(const tptr<float> &input_tensor) override
         {
             auto output = (*_modules[0].second)(input_tensor);
             for (auto m = next(_modules.begin()); m != _modules.end(); m++)
@@ -222,7 +228,7 @@ namespace nn
     {
     public:
         ReLU() : Module() { name = "ReLU"; }
-         tptr<float> forward(const  tptr<float> &input_tensor)
+         tptr<float> forward(const  tptr<float> &input_tensor) override
         {
             auto condition = input_tensor > 0.0f;
             // auto mask = zeros->where(input_tensor>0.0f, 1.0f); // max(0, x)  y = x if x>0 else 0;
@@ -242,7 +248,7 @@ namespace nn
             training = true;
             name="DropoutOp";
         };
-         tptr<float> forward(const  tptr<float> &input_tensor)
+        tptr<float> forward(const  tptr<float> &input_tensor) override
         {
             if(!training){
                 return input_tensor;
@@ -277,7 +283,7 @@ namespace nn
     class Softmax : public Module{
         public:
             Softmax(int d): Module(), _dim(d){ name="Softmax";}
-             tptr<float> forward(const  tptr<float>& x){
+             tptr<float> forward(const  tptr<float>& x) override{
                 return softmax(x, _dim);
             };
         int _dim;
@@ -304,7 +310,7 @@ namespace nn
                 training = true;
                 name="BatchNormOp";
             }
-             tptr<float> forward(const  tptr<float>& x){
+             tptr<float> forward(const  tptr<float>& x) override{
                 
                 auto mean = x->mean(-2, true); // mean of features across batch _,N,F
                  tptr<float> scaled_x;
@@ -351,7 +357,7 @@ namespace nn
                 training = true;
                 name="LayerNormOp";
             }
-             tptr<float> forward(const  tptr<float>& x){
+             tptr<float> forward(const  tptr<float>& x) override{
                 auto scaled_x = (x - x->mean(-1, true)) / (x->var(-1, 0, true) + _eps)->pow(0.5);
                 if(_elementwise_affine) scaled_x = scaled_x * _gammas;
                 if(_bias) scaled_x = scaled_x + _betas;
@@ -384,7 +390,7 @@ namespace nn
     class Sigmoid : public Module{
         public:
             Sigmoid(): Module(){ name="Sigmoid";}
-            tptr<float> forward(const tptr<float> &x){
+            tptr<float> forward(const tptr<float> &x) override{
                 return sigmoid(x);
             };
     };
@@ -392,7 +398,7 @@ namespace nn
     class LogSoftmax : public Module{
         public:
             LogSoftmax(int dim): Module(), _dim(dim){ name="LogSoftmax";}
-             tptr<float> forward(const  tptr<float>& x){
+             tptr<float> forward(const  tptr<float>& x) override{
                 auto output = softmax(x, _dim)->log();
                 output->grad_fn->name=name;
                 return output;

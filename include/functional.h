@@ -15,24 +15,25 @@ namespace cyg
  */
 namespace functional
 {
+    using namespace std;
     /**
-     * return the indices and values of the max values in the input tensor
+     * @brief return the indices and values of the max values in the input tensor
      * the max val can be computed along a dimension or over all the elements (if no dim is specified)
      */
     template<class T>
-    std::tuple<std::shared_ptr<cyg::tensor<T>>, std::shared_ptr<cyg::tensor<int>>> max(const std::shared_ptr<cyg::tensor<T>>& input_tensor, int dim, const bool& keepdim)
+    tuple<shared_ptr<cyg::tensor<T>>, shared_ptr<cyg::tensor<int>>> max(const cyg::tensor<T>& input_tensor, int dim = INT_MAX, const bool& keepdim = false)
     {
-        std::vector<size_t> new_dims;
-        std::valarray<int> id_data;
+        vector<size_t> new_dims;
+        valarray<int> id_data;
 
-        auto input_data = (*input_tensor->data());
-        auto max_values = new std::valarray<T>(1);
-        auto max_idxs = new std::valarray<int>(1);
+        auto input_data = (*input_tensor.data());
+        auto max_values = new valarray<T>(1);
+        auto max_idxs = new valarray<int>(1);
 
         if (dim == INT_MAX) // flattened input
         {
-            id_data.resize(input_tensor->numel());
-            std::iota(std::begin(id_data), std::end(id_data), 0);
+            id_data.resize(input_tensor.numel());
+            iota(begin(id_data), end(id_data), 0);
             auto max_val =  input_data.max();
             (*max_values)[0] = max_val;
             (*max_idxs)[0] = std::valarray(id_data[input_data == max_val])[0];
@@ -40,24 +41,24 @@ namespace functional
         }
         else
         {
-            if (dim < 0) dim = input_tensor->rank() + dim;
-            id_data.resize(input_tensor->shape()[dim]);
+            if (dim < 0) dim = input_tensor.rank() + dim;
+            id_data.resize(input_tensor.shape()[dim]);
             std::iota(std::begin(id_data), std::end(id_data), 0);
 
-            const auto [strides, start_idxs] = generate_idxs(input_tensor->shape(), dim);
+            const auto [strides, start_idxs] = generate_idxs(input_tensor.shape(), dim);
 
             max_values->resize(start_idxs.size());
             max_idxs->resize(start_idxs.size());
 
             for (auto i = 0; const auto &idx : start_idxs)
             {
-                auto gslice = std::slice(idx, input_tensor->shape()[dim], strides[dim]);
+                auto gslice = std::slice(idx, input_tensor.shape()[dim], strides[dim]);
                 auto data_slice = std::valarray(input_data[gslice]);
                 auto max_val = data_slice.max();
                 (*max_values)[i] = max_val;
                 (*max_idxs)[i++] = std::valarray(id_data[data_slice == max_val])[0];
             }
-            new_dims = input_tensor->shape();
+            new_dims = input_tensor.shape();
             new_dims[dim] = 1;
             if (!keepdim)
                 new_dims.erase(new_dims.begin() + dim);
@@ -72,37 +73,37 @@ namespace functional
      * tensors sizes must be the same
      */
     template<class T>
-    std::shared_ptr<cyg::tensor<T>> maximum(const std::shared_ptr<cyg::tensor<T>>& tensor1, const std::shared_ptr<cyg::tensor<T>>& tensor2){
+    std::shared_ptr<cyg::tensor<T>> maximum(const cyg::tensor<T> &tensor1, const cyg::tensor<T> &tensor2){
 
-        CHECK_EQUAL_SIZES(tensor1->shape(), tensor2->shape());
+        CHECK_EQUAL_SIZES(tensor1.shape(), tensor2.shape());
 
-        int n_elements = tensor1->numel();
+        int n_elements = tensor1.numel();
 
-        auto out_data = new std::valarray<T>(n_elements);
-        auto t1data = (*tensor1->data());
-        auto t2data = (*tensor2->data());
+        auto out_data = new valarray<T>(n_elements);
+        auto t1data = (*tensor1.data());
+        auto t2data = (*tensor2.data());
 
         for(int i=0; i<n_elements; i++){
             (*out_data)[i] = std::max(t1data[i], t2data[i]);
         }
 
-        return std::make_shared<cyg::tensor<T>>(tensor1->shape(), out_data, false);
+        return make_shared<cyg::tensor<T>>(tensor1.shape(), out_data, false);
     }
 
     /**
      * computes the maximum of the tensor's elements  and the given value
      */
     template<class T>
-    std::shared_ptr<cyg::tensor<T>> maximum(const std::shared_ptr<cyg::tensor<T>>& tensor1, const T value){
+    std::shared_ptr<cyg::tensor<T>> maximum(const cyg::tensor<T> &tensor1, const T value){
 
-        return maximum<T>(tensor1, std::make_shared<cyg::tensor<T>>(tensor1->shape(), static_cast<T>(value), false));
+        return maximum<T>(tensor1, cyg::tensor<T>(tensor1.shape(), static_cast<T>(value), false));
     }
 
     template<class T>
-    std::shared_ptr<cyg::tensor<T>> abs(const std::shared_ptr<cyg::tensor<T>> &t)
+    std::shared_ptr<cyg::tensor<T>> abs(const cyg::tensor<T> &t)
     {
-        auto cloned_t = t->clone();
-        auto new_data = new std::valarray<T>();
+        auto cloned_t = t.clone();
+        auto new_data = new valarray<T>();
         *new_data = std::abs(*t->data());
         cloned_t->set_data(new_data);
     
@@ -113,14 +114,14 @@ namespace functional
      * tensors sizes must be the same
      */
     template<class T>
-    std::shared_ptr<cyg::tensor<T>> minimum(const std::shared_ptr<cyg::tensor<T>> &t1, const std::shared_ptr<cyg::tensor<T>> &t2){
+    std::shared_ptr<cyg::tensor<T>> minimum(const cyg::tensor<T> &t1, const cyg::tensor<T> &t2){
 
         CHECK_EQUAL_SIZES(t1->shape(), t2->shape());
-        no_grad({t1, t2}, true);
+        // @TODO disbale autograd before the next line
+        // no_grad({t1, t2}, true);
         // t1->requires_grad(false);
         // t2->requires_grad(false);
         auto output = -(maximum<T>(-t1, -t2));
-        no_grad({t1, t2}, false);
         return output;
     }
 
@@ -128,9 +129,9 @@ namespace functional
      * computes the minimum of the tensor's elements  and the given value
      */
     template<class T>
-    std::shared_ptr<cyg::tensor<T>> minimum(const std::shared_ptr<cyg::tensor<T>>& tensor1, const T value){
+    std::shared_ptr<cyg::tensor<T>> minimum(const cyg::tensor<T> &tensor1, const T value){
 
-        return minimum<T>(tensor1, std::make_shared<cyg::tensor<T>>(tensor1->shape(), static_cast<T>(value), false));
+        return minimum<T>(tensor1, cyg::tensor<T>(tensor1.shape(), static_cast<T>(value), false));
     }
 
     template<class T>
@@ -307,7 +308,7 @@ namespace functional
         return output;
     };
     template<class T>
-    std::shared_ptr<cyg::tensor<T>> transpose(cyg::tensor<T> &t, int d1, int d2){
+    std::shared_ptr<cyg::tensor<T>> transpose(const cyg::tensor<T> &t, int d1, int d2){
 
         if(d1<0) d1 = t.rank() + d1;
         if(d2<0) d2 = t.rank() + d2;
@@ -370,26 +371,26 @@ namespace functional
     }
 
     template <class T>
-    std::shared_ptr<cyg::tensor<T>> matmul(const std::shared_ptr<cyg::tensor<T>>& lhs, const std::shared_ptr<cyg::tensor<T>>& rhs)
+    std::shared_ptr<cyg::tensor<T>> matmul(const cyg::tensor<T> &lhs, const cyg::tensor<T> &rhs)
     {
-        const bool islhsgreater = lhs->rank() >= rhs->rank();
-        std::vector<size_t> new_dims = islhsgreater ? lhs->shape() : rhs->shape();
-        new_dims[islhsgreater ? new_dims.size() - 1 : new_dims.size() - 2] = islhsgreater ? rhs->shape()[rhs->rank() - 1] : lhs->shape()[lhs->rank() - 2];
+        const bool islhsgreater = lhs.rank() >= rhs.rank();
+        std::vector<size_t> new_dims = islhsgreater ? lhs.shape() : rhs.shape();
+        new_dims[islhsgreater ? new_dims.size() - 1 : new_dims.size() - 2] = islhsgreater ? rhs.shape()[rhs.rank() - 1] : lhs.shape()[lhs.rank() - 2];
 
         int n_elems = std::accumulate(new_dims.begin(), new_dims.end(), 1, std::multiplies<int>());
 
         auto out_data = new std::valarray<T>(n_elems);
 
-        int lhs_dim = lhs->rank() - 1;
-        int rhs_dim = rhs->rank() - 2;
+        int lhs_dim = lhs.rank() - 1;
+        int rhs_dim = rhs.rank() - 2;
 
-        const auto [lhs_strides, lhs_rows] = generate_idxs(lhs->shape(), lhs_dim);
-        const auto [rhs_strides, rhs_cols] = generate_idxs(rhs->shape(), rhs_dim);
+        const auto [lhs_strides, lhs_rows] = generate_idxs(lhs.shape(), lhs_dim);
+        const auto [rhs_strides, rhs_cols] = generate_idxs(rhs.shape(), rhs_dim);
 
-        int n_cols = rhs->shape()[rhs_dim];
+        int n_cols = rhs.shape()[rhs_dim];
 
-        auto ldata = *lhs->data();
-        auto rdata = *rhs->data();
+        auto ldata = *lhs.data();
+        auto rdata = *rhs.data();
 
         //@todo improve matmul
         // int ldx =0, rdx = 0;
@@ -409,52 +410,60 @@ namespace functional
             std::valarray<T> l_slice = std::valarray(ldata[std::slice(lhs_rows[ ldx % lhs_rows.size()], n_cols, lhs_strides[lhs_dim])]);
             std::valarray<T> r_slice = std::valarray(rdata[std::slice(rhs_cols[rdx % rhs_cols.size()], n_cols, rhs_strides[rhs_dim])]);
             (*out_data)[rdx] = (r_slice * l_slice).sum();
-            ldx += ((rdx + 1) % rhs->shape()[rhs->rank() - 1]==0);
+            ldx += ((rdx + 1) % rhs.shape()[rhs.rank() - 1]==0);
         }
-        auto out_tensor = std::make_shared<cyg::tensor<T>>(new_dims, out_data, lhs->requires_grad() || rhs->requires_grad());
-
-        return out_tensor;
+        return std::make_shared<cyg::tensor<T>>(new_dims, out_data, lhs.requires_grad() || rhs.requires_grad());
     }
 
     template <class T>
-    std::shared_ptr<cyg::tensor<T>> mask(const std::shared_ptr<cyg::tensor<T>>& condition, const std::shared_ptr<cyg::tensor<T>>& true_value, const std::shared_ptr<cyg::tensor<T>>& false_value)
+    std::shared_ptr<cyg::tensor<T>> mask(const cyg::tensor<T> &condition, const cyg::tensor<T> &true_value, const cyg::tensor<T> &false_value)
     {
-        auto out_data = new std::valarray<T>(true_value->numel());
-        auto req_grad = true_value->requires_grad() || false_value->requires_grad();
+        auto out_data = new std::valarray<T>(true_value.numel());
+        auto req_grad = true_value.requires_grad() || false_value.requires_grad();
         std::vector<size_t> new_dims;
 
-        if(is_broadcastable(condition->shape(), true_value->shape()) && is_broadcastable(condition->shape(), false_value->shape()))
+        if(is_broadcastable(condition.shape(), true_value.shape()) && is_broadcastable(condition.shape(), false_value.shape()))
         {
             std::valarray<T> cond_data, true_data, false_data;
-            cond_data = *condition->data(); true_data = *true_value->data(); false_data = *false_value->data();
+            cond_data = *condition.data(); true_data = *true_value.data(); false_data = *false_value.data();
             
-            broadcast(&cond_data, condition->shape(), &true_data, true_value->shape(), &new_dims);
-            broadcast(&cond_data, condition->shape(), &false_data, false_value->shape(), &new_dims);
+            broadcast(&cond_data, condition.shape(), &true_data, true_value.shape(), &new_dims);
+            broadcast(&cond_data, condition.shape(), &false_data, false_value.shape(), &new_dims);
 
             (*out_data)[cond_data>0.0f] = (true_data)[cond_data>0.0f];
             (*out_data)[cond_data<=0.0f] = (false_data)[cond_data<=0.0f];
 
         }else 
         {
-            auto cond = *condition->data();
-            (*out_data)[cond>0.0f] = (*true_value->data())[cond>0.0f];
-            (*out_data)[cond<=0.0f] = (*false_value->data())[cond<=0.0f];
+            auto cond = *condition.data();
+            (*out_data)[cond>0.0f] = (*true_value.data())[cond>0.0f];
+            (*out_data)[cond<=0.0f] = (*false_value.data())[cond<=0.0f];
         }
 
         return std::make_shared<cyg::tensor<T>>(new_dims, out_data, req_grad);
     };
-    
+    /**
+     * @brief index tensor given the indices along a the input dim
+     * TODO improve code below
+     * 
+     * @param t (type tensor<T>)
+     * @param indices (type tensor<int>) 1D tensor
+     * @param dim (type int)
+     * 
+     * @return shared_ptr<tensor<T>>
+     */
     template<class T, class B>
-    std::shared_ptr<cyg::tensor<T>> slice(const std::shared_ptr<cyg::tensor<T>> &t, const std::shared_ptr<cyg::tensor<B>> &indices, int dim){
-        if(dim<0) dim = t->rank() + dim;
-        auto [strides, idxs] = generate_idxs(t->shape(), dim);
-        auto new_d =  new std::valarray<T>(indices->numel());
+    std::shared_ptr<cyg::tensor<T>> slice(const cyg::tensor<T> &t, const cyg::tensor<B> &indices, int dim){
+        if(dim<0) dim = t.rank() + dim;
+        auto [strides, idxs] = generate_idxs(t.shape(), dim);
+        auto new_d =  new std::valarray<T>(indices.numel());
         for(int i=0; i<idxs.size(); i++){
-            (*new_d)[i] = std::valarray((*t->data())[std::slice(idxs[i], t->shape()[dim], strides[dim])])[(*indices)[i]];
+            (*new_d)[i] = std::valarray((*t.data())[std::slice(idxs[i], t.shape()[dim], strides[dim])])[indices[i]];
         }
-        return std::make_shared<cyg::tensor<T>>(indices->shape(), new_d, t->requires_grad());
-    }
 
+        return std::make_shared<cyg::tensor<T>>(indices.shape(), new_d, t.requires_grad());
+    }
+    
     template<class T>
     std::shared_ptr<cyg::tensor<T>> stack(const std::vector<cyg::tensor<T>*> ts, int dim){
     //     //cyg::no_grad({ts}, true);

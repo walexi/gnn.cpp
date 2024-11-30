@@ -1,10 +1,11 @@
 #include <random>
 #include <iomanip>
+#include <iostream>
 #include "utils.h"
 
 using namespace std;
 
-std::default_random_engine dfe(time(nullptr));
+default_random_engine dfe(time(nullptr));
 
 void CHECK_TRANSPOSE(std::vector<size_t> s, int a, int b)
 {
@@ -52,7 +53,7 @@ void CHECK_ARGS_OPS_BROADCAST(const std::vector<size_t> dims, const std::vector<
 void CHECK_VALID_INDEX(std::vector<size_t> dims, std::vector<size_t> tdims)
 {
     for (int i = 0; i < tdims.size(); ++i)
-        if (dims[i] >= tdims[i] || dims[i] < 0)
+        if (dims[i]!=INT_MAX && (dims[i] >= tdims[i] || dims[i] < 0))
             throw std::runtime_error(ERROR_OUT_OF_RANGE);
 }
 
@@ -86,11 +87,13 @@ float generate_random(const float &low, const float &high)
     return u(dfe);
 }
 
-int get_index(vector<size_t>* t_dims, vector<size_t> dims)
+size_t get_index(vector<size_t> t_dims, vector<size_t> dims)
 {
     // CHECK_ARGS_DIMS(dims, -1, t_dims);
-    transform(dims.cbegin(), dims.cend(), next(t_dims->cbegin()), dims.begin(), multiplies<size_t>());
-    auto index = accumulate(dims.cbegin(), dims.cend(), dims[dims.size() - 1]);
+    auto index = dims[dims.size()-1];
+    for(auto i=0;i<dims.size()-1;i++){
+        index+=(dims[i] * t_dims[i+1]);
+    };
     return index;
 }
 tuple<valarray<size_t>, valarray<size_t>> generate_idxs(const vector<size_t> tdims, int dim)

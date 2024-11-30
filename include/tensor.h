@@ -84,15 +84,15 @@ namespace cyg
         };
         friend tptr<bool> operator>(tptr<T> lhs, const float &rhs)
         {
-            return lhs->gt(rhs);
+            return lhs > rhs;
         };
         friend tptr<bool> operator<(tptr<T> lhs, const tptr<T> &rhs)
         {
-            return rhs->gt(lhs);
+            return rhs > lhs;
         };
         friend tptr<bool> operator<(tptr<T> lhs, const float &rhs)
         {
-            auto rhs_tensor = make_shared<tensor<T>>(lhs->shape(), static_cast<T>(rhs), false);
+            auto rhs_tensor = std::make_shared<tensor<T>>(lhs->shape(), static_cast<T>(rhs), false);
             return rhs_tensor->gt(lhs);
         };
 
@@ -128,8 +128,26 @@ namespace cyg
                 this->zero_grad();
             }
         };
-        // // tensor(const tensor& other):grad_fn(other.grad_fn), _data(other._data), _grad(other._grad), requires_grad(other.requires_grad), _prev(other._prev),_dims(other._dims){}
-        // ~tensor() noexcept { delete _data; }; // destructor must not fail - so noexcept
+        //copy constructor
+        // tensor(const tensor<T>& other): {
+        //     delete _data; delete _grad;
+        //     _data = other.data(); 
+        //     _requires_grad = other.requires_grad();
+        //     _dims = other.shape();
+        //     //disable copy for tensor with req grad true, dont think it make sense
+        // };
+        // //copy assignment
+        // tensor& operator=(const tensor<T> other){
+        //     if(this != &other){
+        //         delete _data, _grad;
+        //         _data = other.data();
+        //         _requires_grad = other.requires_grad();
+        //         _dims = other.shape();
+        //     }
+        //     //disable copy for tensor with req grad true, dont think it make sense
+        //     return *this;
+        // };
+        // ~tensor() noexcept { delete _data; delete _grad; grad_fn->reset(); }; // destructor must not fail - so noexcept
         friend class Optim;
         std::valarray<T> *data() const { return this->_data; };
         template <class A>
@@ -143,7 +161,7 @@ namespace cyg
 
             if (this->_requires_grad)
                 this->zero_grad();
-        }
+        };
         template <class A>
         operator tensor<A>() const
         {
@@ -151,7 +169,7 @@ namespace cyg
             for (int i = 0; i < this->numel(); i++)
                 (*new_data)[i] = static_cast<A>((*this->_data)[i]);
             return tensor<A>(this->_dims, new_data, this->_requires_grad);
-        }
+        };
         std::shared_ptr<tensor<float>> to_float()
         { // inplace for casting = tensors wo grad
             // if (typeid(T) == typeid(float &))
@@ -160,8 +178,6 @@ namespace cyg
         }
         std::shared_ptr<tensor<int>> to_int()
         {
-            if (typeid(T) == typeid(int &))
-                return this->shared_from_this();
             return std::make_shared<tensor<int>>((tensor<int>)(*this));
         }
         std::shared_ptr<tensor<bool>> to_bool()
@@ -177,7 +193,7 @@ namespace cyg
             return std::make_shared<tensor<double>>((tensor<double>)(*this));
         }
         std::vector<size_t> shape() const { return this->_dims; };
-        const int numel() const { return this->_data->size(); };
+        const size_t numel() const { return this->_data->size(); };
         // const int count_nonzero() const { return (this->_data == 0).sum();}
         const int rank() const { return this->_dims.size(); };
         std::valarray<float> *grad()
@@ -263,9 +279,9 @@ namespace cyg
         /**
          * @brief operator overloading for the function call to index a tensor
          *
-         * @return value at the input index (type float)
+         * @return value at the input index (type T)
          */
-        T operator()(size_t d, ...)
+        T operator()(size_t d, ...) const
         {
             std::vector<size_t> dims = {d};
             va_list args;
@@ -276,11 +292,11 @@ namespace cyg
                 dims.push_back(dd);
             }
             va_end(args);
-            CHECK_VALID_INDEX(dims, this->_dims);
-            auto index = get_index(&this->_dims, dims);
+            CHECK_VALID_INDEX(dims, _dims);
+            auto index = get_index(_dims, dims);
             return (*this->_data)[index];
         };
-        auto &operator[](size_t dim) // index a 1D tensor
+        auto &operator[](size_t dim) const// index a 1D tensor
         {
             if (this->rank() != 1)
                 throw std::runtime_error("tensor must be 1D");
@@ -582,14 +598,21 @@ namespace cyg
             }
         }
 
-        std::shared_ptr<tensor<int>> argmax(int dim = INT_MAX, const bool &keepdim = false)
+        tptr<int> argmax(int dim = INT_MAX, const bool &keepdim = false)
         {
-            CHECK_VALID_RANGE(dim, this->rank(), -this->rank());
-
-            auto [_, indices_tensor] = functional::max(this->shared_from_this(), dim, keepdim);
-
-            return indices_tensor;
+            return std::get<1>(this->max(dim, keepdim));
         };
+        T item(){
+            if(this->numel()!=1) throw std::runtime_error("invalid op, tensor must be scalar");
+            return (*_data)[0];
+        }
+        std::tuple<tptr<T>, tptr<int>> max(int dim = INT_MAX, const bool &keepdim = false) const{
+            CHECK_VALID_RANGE(dim, this->rank(), -this->rank());
+            // TODO move to operation to compute backprop for max_values
+            auto [max_values, indices] = functional::max(*this, dim, keepdim);
+
+            return {max_values, indices};
+        }
         void triu() // inplace op
         {
             CHECK_ARGS_IN_PLACE_OPS(this->shared_from_this());
@@ -632,7 +655,17 @@ namespace cyg
         std::shared_ptr<tensor<bool>> gt(const tptr<T> &other)
         {
             CHECK_ARGS_OPS_BROADCAST(this->shape(), other->shape());
-            return functional::gt(this->shared_from_this(), other);
+            return functional::gt(*this, *other);
+        }
+        
+        /**
+         * t1>t2
+         * true where elements of t1 is greater than elements of t2 else false
+         */
+        std::shared_ptr<tensor<bool>> gt(const float &other)
+        {
+            auto other_tensor = tensor<T>(this->_dims, static_cast<T>(other), false);
+            return functional::gt(*this, &other_tensor);
         }
         /**
          * t1<t2
@@ -641,17 +674,10 @@ namespace cyg
         std::shared_ptr<tensor<bool>> lt(const tptr<T> &other)
         {
             CHECK_ARGS_OPS_BROADCAST(this->shape(), other->shape());
-            return functional::gt(other, this->shared_from_this());
+            return functional::gt(*other, &this);
         }
-        /**
-         * t1>t2
-         * true where elements of t1 is greater than elements of t2 else false
-         */
-        std::shared_ptr<tensor<bool>> gt(const float &other)
-        {
-            auto other_tensor = std::make_shared<tensor<T>>(this->_dims, static_cast<T>(other), false);
-            return functional::gt(*this, *other_tensor);
-        }
+        
+
         tptr<T> clone(const bool &require_grad = false, const T fillValue = INT_MAX) const
         {
             auto data = new std::valarray<T>();
@@ -665,11 +691,13 @@ namespace cyg
         /**
          * 1D tensor as input
          */
-        tptr<T> slice(const tptr<int> &idx_tensor, int dim = -1)
+        tptr<T> at(const tptr<int> &idx_tensor, int dim = -1)
         {
             CHECK_VALID_RANGE(dim, this->rank(), -this->rank());
+            auto c = std::find(_dims.rbegin()+1, _dims.rend(), idx_tensor->numel());
+            if(c==_dims.rend()) throw std::runtime_error("invalid op, given tensor's shape must be compatible with this tensor");
             auto sl_op = std::make_unique<Slice<tensor<T>>>();
-            auto output = sl_op->forward(this->shared_from_this(), idx_tensor, dim);
+            auto output = sl_op->forward(this->shared_from_this(), idx_tensor->to_float(), dim);
             if (output->requires_grad())
                 output->grad_fn = std::move(sl_op);
             return output;
@@ -690,6 +718,20 @@ namespace cyg
 
                 this->repeat(this->rank() + j, dims[dims.size() + j]);
             }
+        }
+
+        void fill_diagonal_(T value){
+            //inplace op
+            CHECK_ARGS_IN_PLACE_OPS(this->shared_from_this());
+            //work for only 2D matrix
+            if(this->rank()!= 2 || _dims[0]!=_dims[1]) throw std::runtime_error("all dimensions must be of same length and tensor must be 2D");
+            int num_elem = _dims[0];
+            int stride = std::accumulate(_dims.begin()+1, _dims.end(), 1,  std::multiplies<int>());
+            (*_data)[std::slice(0, num_elem, stride+1)] = 1;
+        }
+
+        void flatten(){
+            _dims = {1};
         }
 
     protected:
@@ -774,30 +816,54 @@ namespace cyg
         return std::make_shared<tensor<int>>(input_tensor->shape(), 0, requires_grad);
     };
     /**
-     * @brief enable/disbale grad for input tensors, similar to with torch.no_grad();
+     * @brief disbale grad for input tensors, similar to 'with torch.no_grad()';
      *  no_grad(ts) => disbale grad
-     * @TODO move to operation, save state of input tensors
      */
-    template <class T>
-    void no_grad(std::vector<tptr<T>> ts)
+    void no_grad(std::vector<tptr<float>> ts)
     {
         for (const auto &t : ts)
         {
             t->requires_grad_(false);
         }
     }
-    /**
-     * concatenates the input tensors along a new dimension
+     /**
+     * @brief enable grad for input tensors, similar to 'with torch.no_grad()';
+     *  no_grad(ts) => disbale grad
      */
-    template<class T>
-    tptr<T> stack(const std::vector<tptr<T>> ts, int dim=0){
-        CHECK_CONCAT(ts);
-        CHECK_VALID_RANGE(dim, ts[0]->rank() , -ts[0]->rank());
-        auto stack_op = std::make_unique<Stack<tensor<T>>>();
-        auto output = stack_op->forward(ts, dim);
-        if(output->requires_grad()) voutput->grad_fn = std::move(stack_op);
-        return output;
+    void enable_grad(std::vector<tptr<float>> ts)
+    {
+        for (const auto &t : ts)
+        {
+            t->requires_grad_(true);
+        }
     }
+    /**
+     * @brief returns a 2D tensor with 1s on the diagonal and 0s elsewhere
+     * @param n(type size_t) rows
+     * @param m(type size_t) columns
+     * 
+     * @return tensor with 1s on the diagonal and 0s elsewhere (shape n * m) (type std::shared_ptr<T>)
+     */
+    tptr<int> eye(size_t n, size_t m=INT_MAX){
+        if(m==INT_MAX) m = n;
+        auto dims = {n, m};
+        auto t = std::make_shared<tensor<int>>(dims, 0, false);
+        t->fill_diagonal_(1);
+        return t;
+    }
+    // diag(shape)
+    // /**
+    //  * concatenates the input tensors along a new dimension
+    //  */
+    // template<class T>
+    // tptr<T> stack(const std::vector<tptr<T>> ts, int dim=0){
+    //     CHECK_CONCAT(ts);
+    //     CHECK_VALID_RANGE(dim, ts[0]->rank() , -ts[0]->rank());
+    //     auto stack_op = std::make_unique<Stack<tensor<T>>>();
+    //     auto output = stack_op->forward(ts, dim);
+    //     if(output->requires_grad()) output->grad_fn = std::move(stack_op);
+    //     return output;
+    // }
 
 }
 #endif

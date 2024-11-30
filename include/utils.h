@@ -102,7 +102,7 @@ float generate_random(const float &low, const float &high);
  *
  * @return the 1D index of the element (type int)
  * */
-int get_index(std::vector<std::size_t>* t_dims, std::vector<std::size_t> dims);
+size_t get_index(std::vector<std::size_t> t_dims, std::vector<std::size_t> dims);
 
 /**
  * @brief generate start ids along a dimension

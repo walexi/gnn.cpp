@@ -471,7 +471,7 @@ namespace cyg
         {
             // ...*a*b   mm   ...*b*c = ...*a*c
             //@todo clean up matmul and MatMul forward and backward
-            auto output = functional::matmul(lhs, rhs);
+            auto output = functional::matmul(*lhs, *rhs);
             if(output->requires_grad()) this->context->save_for_backward({lhs, rhs});
 
             return output;
@@ -492,7 +492,7 @@ namespace cyg
             {
                 auto cloned_rhs = rhs->clone(false);
                 cloned_rhs->transpose(-1, -2, true);
-                auto out_tensor = functional::matmul(incoming_grad, cloned_rhs); // transpose = ...*c*b
+                auto out_tensor = functional::matmul(*incoming_grad, *cloned_rhs); // transpose = ...*c*b
                 out_tensor->sum_to_size(lhs->shape());
                 lhs->backward(out_tensor);
             }
@@ -500,7 +500,7 @@ namespace cyg
             {
                 auto cloned_lhs = lhs->clone(false);
                 cloned_lhs->transpose(-1, -2, true);
-                auto out_tensor = functional::matmul(cloned_lhs, incoming_grad); // transpose = ...*b*a
+                auto out_tensor = functional::matmul(*cloned_lhs, *incoming_grad); // transpose = ...*b*a
                 out_tensor->sum_to_size(rhs->shape());
                 rhs->backward(out_tensor);
             }
@@ -515,7 +515,7 @@ namespace cyg
             Mask() : Operation<T>() {this->name="Mask";}
             std::shared_ptr<T> forward(const std::shared_ptr<T>& condition, const std::shared_ptr<T>& true_value, const std::shared_ptr<T>& false_value)
             {
-                auto output = functional::mask(condition, true_value, false_value);
+                auto output = functional::mask(*condition, *true_value, *false_value);
                 if(output->requires_grad()) this->context->save_for_backward({true_value, false_value, condition});
                 return output;
             } 
@@ -541,18 +541,18 @@ namespace cyg
             this->_done = true;;   
         }
     };
-
+    // TODO context's cache with heterogenous containers
     template<class T>
     class Slice : public Operation<T>
     {
         public:
             Slice() : Operation<T>() {this->name="Slice";}
-            std::shared_ptr<T> forward(const std::shared_ptr<T> &t, const std::shared_ptr<tensor<int>> &indices, int dim=-1)
+            std::shared_ptr<T> forward(const std::shared_ptr<T> &t, const std::shared_ptr<T> &indices, int dim=-1) //temporarily cast indices to float, fix with herogenous containers
             {
-                auto output = functional::slice(t, indices, dim);
+                auto output = functional::slice<float, int>(*t, *indices, dim);
                 if(output->requires_grad()) {
-                    this->context->save_for_backward({t});
-                    this->context->saved_data["dim"] = dim;
+                    this->context->save_for_backward({t, indices});
+                    this->context->saved_data["dim"] = dim<0? t->rank()+dim: dim;
                 }
                 return output;
             } 
@@ -560,16 +560,23 @@ namespace cyg
             {
                 this->_done = false;
                 auto var = this->context->get_variables();
-                CHECK_BACKWARD(var, 1);
+                CHECK_BACKWARD(var, 2);
                 auto t = var[0];
+                auto indices = var[1];
                 auto dim = this->context->saved_data["dim"];
                 // incoming_grad = N along dim of t
                 // t = *, N
                 if(t->requires_grad()){
-                    auto mask = t->clone(false, 0);
-                    auto local_grad = incoming_grad->clone();
-                    local_grad->unsqueeze(dim);
-                    local_grad = local_grad * mask;
+                    auto local_grad = t->clone(false, 0); // N*a..
+                    // auto new_d =  new std::valarray<T>(0, t->numel());
+                    // auto sh = t->shape();
+                    // sh[dim]=1; auto fac = std::accumulate(sh.begin(), sh.end(), 1, std::multiplies<int>());
+                    // // assertm(idxs.size()==incoming_grad->numel())
+                    // / ERROR fix implementation here
+                    std::valarray<size_t> dfs = {0, 2, 1,2, 4,4,5,5};
+                    std::valarray<float> res = std::valarray((*t->data())[dfs]);
+                    std::cout<<res.size()<<"\n";
+                    // local_grad->set_data(new_d);
                     t->backward(local_grad);
                 }
                 
