@@ -18,6 +18,10 @@
 
 // TODO integrate cuda - thrust -  tensor._data and tensor._grad
 // TODO use herogenous containers (boost, variant)
+// TODO copy/move constructor/assignment
+// TODO fix slice backprop and implement stack and cat operations
+// TODO trainer class
+// TODO add logging
 namespace cyg
 {
 
