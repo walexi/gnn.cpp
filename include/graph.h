@@ -261,6 +261,8 @@ namespace graph
 //https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_gnn.html#the-messagepassing-base-class
     class GCNConv: public MessagePassing<GCNConv>
     {
+        // TODO skip connection to see the effect of oversmoothing in deep gnn
+        // TODO check norm implem, current impl is a slight modification
         public:
             GCNConv(size_t in_channels, size_t out_channels): MessagePassing<GCNConv>("add"), _in_channels(in_channels), _out_channels(out_channels){
                     register_module("lin", new nn::Linear(in_channels, out_channels, false));
