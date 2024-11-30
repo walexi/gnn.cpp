@@ -277,7 +277,7 @@ namespace graph
                 auto out = (*get_module("lin"))(x);
                 auto adj_mat = edge_to_adj_mat(*edge_index, nullptr, x->shape()[0]);
                 adj_mat->sum(-1, true, true); // get the degree nodes => N*1
-                auto norm  = adj_mat->pow(0.5); // sqrt(deg(i))
+                auto norm  = adj_mat->pow(-0.5); // sqrt(deg(i))
                 out = propagate(*edge_index, out, norm);
                 out = out + get_parameter("bias");
 
@@ -295,10 +295,10 @@ namespace graph
 
         size_t _in_channels, _out_channels;
     };
-//     // class GraphSAGELayer: public MessagePassing
+//     // class GraphSAGE: public MessagePassing
 //     // {
 //     //     public:
-//     //         GraphSAGELayer(int in_dim, int out_dim): MessagePassing(){
+//     //         GraphSAGE(int in_dim, int out_dim): MessagePassing(){
 //     //             register_module("lin1", new nn::Linear(in_dim, out_dim, true));
 //     //             register_module("lin2", new nn::Linear(in_dim, out_dim, true));   
 //     //         }
