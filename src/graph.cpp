@@ -179,8 +179,9 @@ tptr<float> graph::GCNConv::forward(const tptr<float> &x, tensor<int> *edge_inde
      * deg * adj_mat(wo self loop)
      * N*1 * N*N * N*1 = N * 1
      */
-    deg = deg->pow(-0.5);                    // sqrt(deg(i)) check for inf
-    auto norm = adj_mat->mm(deg);            //
+    deg = deg->pow(-0.5); // sqrt(deg(i)) check for inf N*1
+    auto norm = adj_mat->mm(deg); // N*N o N*1 = N*1
+    norm*=deg; // N*1 * N*1 = N*1
     out = propagate(*edge_index, out, norm); // num_nodes * out_channels
     out = out + get_parameter("bias");       // num_nodes * out_channels
 
