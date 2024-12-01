@@ -1,5 +1,3 @@
-#include <random>
-#include <iomanip>
 #include <iostream>
 #include "utils.h"
 
@@ -31,14 +29,12 @@ void CHECK_RANK(std::vector<size_t> dims, std::vector<size_t> tdims)
     assertm(dims.size() == tdims.size(), ERROR_RANK_MISMATCH);
     if (dims.size() != tdims.size())
         throw std::runtime_error(ERROR_RANK_MISMATCH);
-
 }
 
 void CHECK_SIZE(std::vector<size_t> dims, int n_elements)
 {
     const int size_tdims = std::accumulate(dims.begin(), dims.end(), 1, std::multiplies<size_t>());
     assertm(n_elements == size_tdims, ERROR_SIZE_MISMATCH) if (n_elements != size_tdims) throw std::runtime_error(ERROR_SIZE_MISMATCH);
-
 }
 
 void CHECK_ARGS_OPS_BROADCAST(const std::vector<size_t> dims, const std::vector<size_t> tdims)
@@ -53,7 +49,7 @@ void CHECK_ARGS_OPS_BROADCAST(const std::vector<size_t> dims, const std::vector<
 void CHECK_VALID_INDEX(std::vector<size_t> dims, std::vector<size_t> tdims)
 {
     for (int i = 0; i < tdims.size(); ++i)
-        if (dims[i]!=INT_MAX && (dims[i] >= tdims[i] || dims[i] < 0))
+        if (dims[i] != INT_MAX && (dims[i] >= tdims[i] || dims[i] < 0))
             throw std::runtime_error(ERROR_OUT_OF_RANGE);
 }
 
@@ -69,7 +65,7 @@ void CHECK_MM_DIMS(std::vector<size_t> ldims, std::vector<size_t> rdims)
 
 void CHECK_VALID_RANGE(const int &dim, const int &rank, const int &low)
 {
-     assertm(dim == INT_MAX || low <= dim < rank, ERROR_OUT_OF_BOUND_DIM);
+    assertm(dim == INT_MAX || low <= dim < rank, ERROR_OUT_OF_BOUND_DIM);
     if (dim != INT_MAX && (dim >= rank || dim < low))
         throw std::runtime_error(ERROR_OUT_OF_BOUND_DIM);
 }
@@ -90,15 +86,17 @@ float generate_random(const float &low, const float &high)
 size_t get_index(vector<size_t> t_dims, vector<size_t> dims)
 {
     // CHECK_ARGS_DIMS(dims, -1, t_dims);
-    auto index = dims[dims.size()-1];
-    for(auto i=0;i<dims.size()-1;i++){
-        index+=(dims[i] * t_dims[i+1]);
+    auto index = dims[dims.size() - 1];
+    for (auto i = 0; i < dims.size() - 1; i++)
+    {
+        index += (dims[i] * t_dims[i + 1]);
     };
     return index;
 }
 tuple<valarray<size_t>, valarray<size_t>> generate_idxs(const vector<size_t> tdims, int dim)
 {
-    if (dim < 0) dim = tdims.size() + dim;
+    if (dim < 0)
+        dim = tdims.size() + dim;
     valarray<size_t> strides(tdims.size());
     size_t s = 1;
     for (int i = tdims.size() - 1; i >= 0; --i)

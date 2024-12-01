@@ -225,7 +225,7 @@ TEST_CASE("testing MatMul")
     auto res = mat_op->forward(lhs, rhs);
     auto incoming_gradients = cyg::randn(res->shape());
     mat_op->backward(incoming_gradients);
-    // auto lhs_grad =  matmul<tensor<float>>(incoming_gradients, rhs->transpose(-1,-2));
+    // auto lhs_grad =  matmul<tensor<float>>(incoming_gradients, rhs->t(-1,-2));
 
     mat_op.reset();
     lhs.reset();

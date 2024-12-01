@@ -78,7 +78,7 @@ TEST_CASE("testing tensor")
     // res->backward(ones_like(res).get());
     cout<<*lhs<<endl;
     cout<<*res<<endl;
-    cout<<*res->transpose(-1,-2)<<endl;
+    cout<<*res->t(-1,-2)<<endl;
     res->requires_grad_(false);
     res->sum(-1, true, true);
     cout<<*res<<endl;

@@ -29,7 +29,6 @@ const char ERROR_OUT_OF_BOUND_DIM[] = "dim is out of range";
 const char ERROR_GRAD_MISMATCH[] = "size mismatch, incoming gradient must be same dimension with tensor";
 const char ERROR_TRANSPOSE[] = "invalid inp";
 
-
 void CHECK_TRANSPOSE(std::vector<size_t> s, int a, int b);
 
 /**
@@ -142,6 +141,8 @@ std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>> generate_idxs
 
 bool is_broadcastable(const std::vector<size_t> &dims, const std::vector<size_t> &tdims);
 
+std::ostream &operator<<(std::ostream &out, const std::vector<size_t> input);
+
 /**
  * @brief use to create am array with the input dims and value,
  *
@@ -151,7 +152,7 @@ bool is_broadcastable(const std::vector<size_t> &dims, const std::vector<size_t>
  * @return unique_ptr of to an array of type T(type std::unique_ptr<std::valarray<T>>)
  */
 template <class T>
-std::valarray<T>* initialize(std::vector<size_t> dims, T value = 1)
+std::valarray<T> *initialize(std::vector<size_t> dims, T value = 1)
 {
     auto n_elements = std::accumulate(dims.begin(), dims.end(), 1, std::multiplies<size_t>());
     auto data = new std::valarray<T>(n_elements);
@@ -169,7 +170,8 @@ std::valarray<T> *repeat_nd(std::valarray<T> *d, const std::vector<size_t> &dims
     for (const auto &[dim, n] : n_repeat)
     {
         const auto &[strides, idxs] = generate_idxs(dims, dim);
-        for (int i = 0; const auto &id : idxs){
+        for (int i = 0; const auto &id : idxs)
+        {
             (*out_data)[std::slice(id, n, strides[dim])] = (*d)[i++ % d->size()];
         }
     }
@@ -279,7 +281,8 @@ std::stringstream printND(std::valarray<T> *nd_data, std::vector<std::size_t> sh
             out.imbue(std::locale(out.getloc(), new custom_tf));
         }
         out << std::setprecision(4);
-        out.width(MAX_WIDTH-1); out<<std::right;
+        out.width(MAX_WIDTH - 1);
+        out << std::right;
         out << sl[0];
         std::for_each(std::begin(sl) + 1, std::end(sl), [&](T n)
                       { 
@@ -307,10 +310,10 @@ std::stringstream printND(std::valarray<T> *nd_data, std::vector<std::size_t> sh
  * @param lhs(type std::shared_ptr<T>)
  */
 template <class T>
-void CHECK_ARGS_IN_PLACE_OPS(const std::shared_ptr<T> &lhs)
+void CHECK_ARGS_IN_PLACE_OPS(const T &lhs)
 {
     assertm(lhs->requires_grad == false, ERROR_IN_PLACE_OP_LEAF);
-    if (lhs->requires_grad())
+    if (lhs.requires_grad())
         throw std::runtime_error(ERROR_IN_PLACE_OP_LEAF);
 };
 

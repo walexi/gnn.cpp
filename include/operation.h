@@ -16,10 +16,6 @@ namespace cyg
     // template <typename T>
     //  void op_cpu(std::valarray<float>& out, const std::valarray<float>& lhs, const std::valarray<float>& rhs, T operation);
 
-    // TODO use heterogeneous containers for the cache to save different tensor types
-    // boost.any comes to the rescue
-
-
     template <class T>
     class Context
     {
@@ -71,26 +67,30 @@ namespace cyg
         std::unique_ptr<Context<T>> context;
 
     public:
-        bool _done = false; //flag to indicate when you backprop through all descendant nodes (children)
+        bool _done = false; // flag to indicate when you backprop through all descendant nodes (children)
         Operation()
         {
             this->context = std::make_unique<Context<T>>();
         };
         std::string name;
-        void reset(){
+        void reset()
+        {
             this->context.reset(new Context<T>());
         }
-        void backward(std::shared_ptr<T> incoming_grad){
-            if(_done) {
-                std::cout<<"trying to backprop on this node again, pls be sure this is intended"<<"\n";
+        void backward(std::shared_ptr<T> incoming_grad)
+        {
+            if (_done)
+            {
+                std::cout << "trying to backprop on this node again, pls be sure this is intended" << "\n";
                 return;
             }
             return _backward(incoming_grad);
         }
         virtual void _backward(std::shared_ptr<T> incoming_grad) {};
         // Operation(const Operation &operation) : context(std::move(operation->context)) {} // rule of three/five/zero
-        friend std::ostream& operator<<(std::ostream& out, const Operation& op){
-            out<<op.name<<"Op";
+        friend std::ostream &operator<<(std::ostream &out, const Operation &op)
+        {
+            out << op.name << "Op";
             return out;
         }
         ~Operation() noexcept
@@ -100,13 +100,15 @@ namespace cyg
     };
 
     template <class T>
-    class Add : public Operation<T>    {
+    class Add : public Operation<T>
+    {
     public:
-        Add() : Operation<T>() { this->name="Add";}
+        Add() : Operation<T>() { this->name = "Add"; }
         std::shared_ptr<T> forward(const std::shared_ptr<T> &lhs, const std::shared_ptr<T> &rhs)
         {
             auto output = functional::add(*lhs, *rhs);
-            if(output->requires_grad()) this->context->save_for_backward({lhs, rhs});
+            if (output->requires_grad())
+                this->context->save_for_backward({lhs, rhs});
             return output;
         };
         void _backward(std::shared_ptr<T> incoming_gradient)
@@ -115,13 +117,14 @@ namespace cyg
             auto var = this->context->get_variables();
             CHECK_BACKWARD<T>(var, 2);
             for (const auto &t : var)
-                if (t->requires_grad()) 
-                { 
+                if (t->requires_grad())
+                {
                     auto cloned_grad = incoming_gradient->clone(false);
                     cloned_grad->sum_to_size(t->shape());
                     t->backward(cloned_grad);
                 }
-            this->_done = true;;
+            this->_done = true;
+            ;
         };
     };
 
@@ -129,11 +132,12 @@ namespace cyg
     class Mul : public Operation<T>
     {
     public:
-        Mul() : Operation<T>() { this->name="Mul";}
-        std::shared_ptr<T> forward(const std::shared_ptr<T>& lhs, const std::shared_ptr<T>& rhs)
+        Mul() : Operation<T>() { this->name = "Mul"; }
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &lhs, const std::shared_ptr<T> &rhs)
         {
             auto output = functional::mul(*lhs, *rhs);
-            if(output->requires_grad()) this->context->save_for_backward({lhs, rhs});
+            if (output->requires_grad())
+                this->context->save_for_backward({lhs, rhs});
 
             return output;
         };
@@ -155,21 +159,23 @@ namespace cyg
             {
                 auto local_grad = functional::mul(*incoming_grad, *rhs);
                 local_grad->requires_grad_(false);
-                local_grad->sum_to_size(lhs->shape());              
+                local_grad->sum_to_size(lhs->shape());
                 lhs->backward(local_grad);
             }
-            this->_done = true;;
+            this->_done = true;
+            ;
         };
     };
     template <class T>
     class Div : public Operation<T>
     {
     public:
-        Div() : Operation<T>() {this->name="Div";}
-        std::shared_ptr<T> forward(const std::shared_ptr<T>& numerator, const std::shared_ptr<T>& denominator)
+        Div() : Operation<T>() { this->name = "Div"; }
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &numerator, const std::shared_ptr<T> &denominator)
         {
             auto output = functional::div(*numerator, *denominator);
-            if(output->requires_grad()) this->context->save_for_backward({numerator, denominator});
+            if (output->requires_grad())
+                this->context->save_for_backward({numerator, denominator});
 
             return output;
         };
@@ -196,7 +202,8 @@ namespace cyg
                 local_grad->sum_to_size(denominator->shape());
                 denominator->backward(local_grad);
             }
-            this->_done = true;;
+            this->_done = true;
+            ;
         };
     };
 
@@ -204,11 +211,12 @@ namespace cyg
     class Pow : public Operation<T>
     {
     public:
-        Pow() : Operation<T>() {this->name="Pow";}
-        std::shared_ptr<T> forward(const std::shared_ptr<T>& base, const std::shared_ptr<T>& exponent)
+        Pow() : Operation<T>() { this->name = "Pow"; }
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &base, const std::shared_ptr<T> &exponent)
         {
             auto output = functional::pow(*base, *exponent);
-            if(output->requires_grad()) this->context->save_for_backward({base, exponent});
+            if (output->requires_grad())
+                this->context->save_for_backward({base, exponent});
 
             return output;
         };
@@ -239,21 +247,23 @@ namespace cyg
                 auto local_grad = functional::mul(*cloned_grad, *be);
                 exponent->backward(local_grad);
             }
-            this->_done = true;;
+            this->_done = true;
+            ;
         };
     };
-    
+
     template <class T>
     class Sum : public Operation<T>
     {
     public:
-        Sum() : Operation<T>() {this->name="Sum";}
-        std::shared_ptr<T> forward(const std::shared_ptr<T> &base, int dim = INT_MAX, const bool& keepdim = false)
+        Sum() : Operation<T>() { this->name = "Sum"; }
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &base, int dim = INT_MAX, const bool &keepdim = false)
         {
             auto output = functional::sum(*base, dim, keepdim);
-            if(output->requires_grad()) {
+            if (output->requires_grad())
+            {
                 this->context->save_for_backward({base});
-                this->context->saved_data["dim"] = dim<0? base->rank() + dim : dim;
+                this->context->saved_data["dim"] = dim < 0 ? base->rank() + dim : dim;
                 this->context->saved_data["keepdim"] = keepdim;
             }
             return output;
@@ -270,12 +280,14 @@ namespace cyg
             if (base->requires_grad())
             {
                 auto cloned_grad = incoming_grad->clone(false);
-                if(dim!=INT_MAX && !keepdim) cloned_grad->unsqueeze(dim);
+                if (dim != INT_MAX && !keepdim)
+                    cloned_grad->unsqueeze(dim);
                 cloned_grad->expand(base->shape());
                 cloned_grad->sum_to_size(base->shape());
                 base->backward(cloned_grad);
             }
-            this->_done = true;;
+            this->_done = true;
+            ;
         };
     };
 
@@ -283,13 +295,14 @@ namespace cyg
     class Mean : public Operation<T>
     {
     public:
-        Mean() : Operation<T>() {this->name="Mean";}
-        std::shared_ptr<T> forward(const std::shared_ptr<T>& base, int dim = INT_MAX, const bool &keepdim = true)
+        Mean() : Operation<T>() { this->name = "Mean"; }
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &base, int dim = INT_MAX, const bool &keepdim = true)
         {
             auto output = functional::mean(*base, dim, keepdim);
-            if(output->requires_grad()){
+            if (output->requires_grad())
+            {
                 this->context->save_for_backward({base});
-                this->context->saved_data["dim"] =  dim<0? base->rank() + dim : dim;
+                this->context->saved_data["dim"] = dim < 0 ? base->rank() + dim : dim;
                 this->context->saved_data["keepdim"] = keepdim;
             }
             return output;
@@ -308,15 +321,17 @@ namespace cyg
             if (base->requires_grad())
             {
                 auto cloned_grad = incoming_grad->clone(false);
-                cloned_grad/=(dim==INT_MAX? base->numel() : base->shape()[dim]);                
+                cloned_grad /= (dim == INT_MAX ? base->numel() : base->shape()[dim]);
 
-                if(dim!=INT_MAX && !keepdim) cloned_grad->unsqueeze(dim);
+                if (dim != INT_MAX && !keepdim)
+                    cloned_grad->unsqueeze(dim);
                 cloned_grad->expand(base->shape());
-                
+
                 // cloned_grad->sum_to_size(base->shape());
                 base->backward(cloned_grad);
             }
-            this->_done = true;;
+            this->_done = true;
+            ;
         };
     };
 
@@ -324,11 +339,12 @@ namespace cyg
     class Exp : public Operation<T>
     {
     public:
-        Exp() : Operation<T>() {this->name="Exp";}
+        Exp() : Operation<T>() { this->name = "Exp"; }
         std::shared_ptr<T> forward(const std::shared_ptr<T> &base)
         {
             auto output = functional::exp(*base);
-            if(output->requires_grad()) this->context->save_for_backward({base});
+            if (output->requires_grad())
+                this->context->save_for_backward({base});
 
             return output;
         };
@@ -345,18 +361,20 @@ namespace cyg
                 local_grad->requires_grad_(true);
                 base->backward(local_grad);
             }
-            this->_done = true;;
+            this->_done = true;
+            ;
         };
     };
     template <class T>
     class Log : public Operation<T>
     {
     public:
-        Log() : Operation<T>() {this->name="Log";}
-        std::shared_ptr<T> forward(const std::shared_ptr<T>& base)
+        Log() : Operation<T>() { this->name = "Log"; }
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &base)
         {
             auto output = functional::log(*base);
-            if(output->requires_grad()) this->context->save_for_backward({base});
+            if (output->requires_grad())
+                this->context->save_for_backward({base});
             return output;
         };
         void _backward(std::shared_ptr<T> incoming_grad) override
@@ -372,7 +390,8 @@ namespace cyg
                 auto local_grad = incoming_grad / cloned_base;
                 base->backward(local_grad);
             }
-            this->_done = true;;
+            this->_done = true;
+            ;
         };
     };
 
@@ -380,15 +399,16 @@ namespace cyg
     class Transpose : public Operation<T>
     {
     public:
-        Transpose() : Operation<T>() {this->name="Transpose";}
-        std::shared_ptr<T> forward(const std::shared_ptr<T>& lhs, int d1 = -1, int d2 = -2)
+        Transpose() : Operation<T>() { this->name = "Transpose"; }
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &lhs, int d1 = -1, int d2 = -2)
         {
             // only works for 0,1, 1,2. not working for 0,2 for now =fix
             auto output = functional::transpose(*lhs, d1, d2);
-            if(output->requires_grad()){
+            if (output->requires_grad())
+            {
                 this->context->save_for_backward({lhs});
                 this->context->saved_data["d1"] = d1;
-                this->context->saved_data["d2"]=d2;
+                this->context->saved_data["d2"] = d2;
             }
             return output;
         };
@@ -403,12 +423,13 @@ namespace cyg
             auto d2 = this->context->saved_data["d2"];
 
             if (base->requires_grad())
-            { 
+            {
                 auto cloned_grad = incoming_grad->clone(false);
-                cloned_grad->transpose(d1, d2, true);
+                cloned_grad->t(d1, d2, true);
                 base->backward(cloned_grad);
             }
-            this->_done = true;;
+            this->_done = true;
+            ;
         };
     };
 
@@ -416,13 +437,14 @@ namespace cyg
     class Var : public Operation<T>
     {
     public:
-        Var() : Operation<T>() {this->name="Var";}
-        std::shared_ptr<T> forward(const std::shared_ptr<T>& base, int dim = INT_MAX, const int& correction =1 ,const bool& keepdim = true)
+        Var() : Operation<T>() { this->name = "Var"; }
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &base, int dim = INT_MAX, const int &correction = 1, const bool &keepdim = true)
         {
             auto output = functional::var(*base, dim, correction, keepdim);
-            if(output->requires_grad()){
+            if (output->requires_grad())
+            {
                 this->context->save_for_backward({base});
-                this->context->saved_data["dim"] = dim<0? base->rank() + dim : dim;
+                this->context->saved_data["dim"] = dim < 0 ? base->rank() + dim : dim;
                 this->context->saved_data["keepdim"] = keepdim;
                 this->context->saved_data["correction"] = correction;
             }
@@ -445,10 +467,11 @@ namespace cyg
                 auto cloned_base = base->clone(false);
                 auto local_grad = incoming_grad->clone(false);
 
-                if(!keepdim && dim!=INT_MAX) local_grad->unsqueeze(dim);
+                if (!keepdim && dim != INT_MAX)
+                    local_grad->unsqueeze(dim);
                 local_grad->expand(base->shape());
 
-                int n_elements = dim==INT_MAX? base->numel() : base->shape()[dim];
+                int n_elements = dim == INT_MAX ? base->numel() : base->shape()[dim];
 
                 auto mean = cloned_base->mean(dim, true);
                 mean->expand(base->shape());
@@ -458,21 +481,23 @@ namespace cyg
                 // grad->sum_to_size(base->shape());
                 base->backward(grad);
             }
-            this->_done = true;;
+            this->_done = true;
+            ;
         };
     };
-    
+
     template <class T>
     class MatMul : public Operation<T>
     {
     public:
-        MatMul() : Operation<T>() {this->name="MatMul";}
-        std::shared_ptr<T> forward(const std::shared_ptr<T>& lhs, const std::shared_ptr<T>& rhs)
+        MatMul() : Operation<T>() { this->name = "MatMul"; }
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &lhs, const std::shared_ptr<T> &rhs)
         {
             // ...*a*b   mm   ...*b*c = ...*a*c
             //@todo clean up matmul and MatMul forward and backward
             auto output = functional::matmul(*lhs, *rhs);
-            if(output->requires_grad()) this->context->save_for_backward({lhs, rhs});
+            if (output->requires_grad())
+                this->context->save_for_backward({lhs, rhs});
 
             return output;
         };
@@ -487,101 +512,109 @@ namespace cyg
             auto rhs = var[1];
             // y = a_11*b_11 + a_12*b_21 + a_13*b_31 + ...
             // dy/da_1* = b_11 + b_21 + b_31 + ...
-            // dy/da = b.transpose() dy/db = a.transpose()
+            // dy/da = b.t() dy/db = a.t()
             if (lhs->requires_grad())
             {
                 auto cloned_rhs = rhs->clone(false);
-                cloned_rhs->transpose(-1, -2, true);
-                auto out_tensor = functional::matmul(*incoming_grad, *cloned_rhs); // transpose = ...*c*b
+                cloned_rhs->t(-1, -2, true);
+                auto out_tensor = functional::matmul(*incoming_grad, *cloned_rhs); // t = ...*c*b
                 out_tensor->sum_to_size(lhs->shape());
                 lhs->backward(out_tensor);
             }
             if (rhs->requires_grad())
             {
                 auto cloned_lhs = lhs->clone(false);
-                cloned_lhs->transpose(-1, -2, true);
+                cloned_lhs->t(-1, -2, true);
                 auto out_tensor = functional::matmul(*cloned_lhs, *incoming_grad); // transpose = ...*b*a
                 out_tensor->sum_to_size(rhs->shape());
                 rhs->backward(out_tensor);
             }
-            this->_done = true;;
+            this->_done = true;
+            ;
         };
     };
 
-    template<class T>
+    template <class T>
     class Mask : public Operation<T>
     {
-        public:
-            Mask() : Operation<T>() {this->name="Mask";}
-            std::shared_ptr<T> forward(const std::shared_ptr<T>& condition, const std::shared_ptr<T>& true_value, const std::shared_ptr<T>& false_value)
-            {
-                auto output = functional::mask(*condition, *true_value, *false_value);
-                if(output->requires_grad()) this->context->save_for_backward({true_value, false_value, condition});
-                return output;
-            } 
+    public:
+        Mask() : Operation<T>() { this->name = "Mask"; }
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &condition, const std::shared_ptr<T> &true_value, const std::shared_ptr<T> &false_value)
+        {
+            auto output = functional::mask(*condition, *true_value, *false_value);
+            if (output->requires_grad())
+                this->context->save_for_backward({true_value, false_value, condition});
+            return output;
+        }
         void _backward(std::shared_ptr<T> incoming_grad) override
         {
             this->_done = false;
             auto var = this->context->get_variables();
-            CHECK_BACKWARD(var, 3); //should be 3
+            CHECK_BACKWARD(var, 3); // should be 3
             auto true_value = var[0];
             auto false_value = var[1];
             auto condition = var[2];
-            if(true_value->requires_grad()){
+            if (true_value->requires_grad())
+            {
                 auto local_grad = incoming_grad->clone(false);
-                (*local_grad->data())[(*condition->data())<=0] = 0;
+                (*local_grad->data())[(*condition->data()) <= 0] = 0;
                 true_value->backward(local_grad);
             }
 
-            if(false_value->requires_grad()){
+            if (false_value->requires_grad())
+            {
                 auto local_grad = incoming_grad->clone(false);
-                (*local_grad->data())[(*condition->data())>0] = 0;
+                (*local_grad->data())[(*condition->data()) > 0] = 0;
                 false_value->backward(local_grad);
             }
-            this->_done = true;;   
+            this->_done = true;
+            ;
         }
     };
     // TODO context's cache with heterogenous containers
-    template<class T>
+    template <class T>
     class Slice : public Operation<T>
     {
-        public:
-            Slice() : Operation<T>() {this->name="Slice";}
-            std::shared_ptr<T> forward(const std::shared_ptr<T> &t, const std::shared_ptr<T> &indices, int dim=-1) //temporarily cast indices to float, fix with herogenous containers
+    public:
+        Slice() : Operation<T>() { this->name = "Slice"; }
+        std::shared_ptr<T> forward(const std::shared_ptr<T> &t, const std::shared_ptr<T> &indices, int dim = -1) // temporarily cast indices to float, fix with herogenous containers
+        {
+            auto output = functional::slice<float, int>(*t, *indices, dim);
+            if (output->requires_grad())
             {
-                auto output = functional::slice<float, int>(*t, *indices, dim);
-                if(output->requires_grad()) {
-                    this->context->save_for_backward({t, indices});
-                    this->context->saved_data["dim"] = dim<0? t->rank()+dim: dim;
-                }
-                return output;
-            } 
-            void _backward(std::shared_ptr<T> incoming_grad) override
-            {
-                this->_done = false;
-                auto var = this->context->get_variables();
-                CHECK_BACKWARD(var, 2);
-                auto t = var[0];
-                auto indices = var[1];
-                auto dim = this->context->saved_data["dim"];
-                // incoming_grad = N along dim of t
-                // t = *, N
-                if(t->requires_grad()){
-                    auto local_grad = t->clone(false, 0); // N*a..
-                    // auto new_d =  new std::valarray<T>(0, t->numel());
-                    // auto sh = t->shape();
-                    // sh[dim]=1; auto fac = std::accumulate(sh.begin(), sh.end(), 1, std::multiplies<int>());
-                    // // assertm(idxs.size()==incoming_grad->numel())
-                    // / ERROR fix implementation here
-                    std::valarray<size_t> dfs = {0, 2, 1,2, 4,4,5,5};
-                    std::valarray<float> res = std::valarray((*t->data())[dfs]);
-                    std::cout<<res.size()<<"\n";
-                    // local_grad->set_data(new_d);
-                    t->backward(local_grad);
-                }
-                
-                this->_done = true;;   
+                this->context->save_for_backward({t, indices});
+                this->context->saved_data["dim"] = dim < 0 ? t->rank() + dim : dim;
             }
+            return output;
+        }
+        void _backward(std::shared_ptr<T> incoming_grad) override
+        {
+            this->_done = false;
+            auto var = this->context->get_variables();
+            CHECK_BACKWARD(var, 2);
+            auto t = var[0];
+            auto indices = var[1];
+            auto dim = this->context->saved_data["dim"];
+            // incoming_grad = N along dim of t
+            // t = *, N
+            if (t->requires_grad())
+            {
+                auto local_grad = t->clone(false, 0); // N*a..
+                // auto new_d =  new std::valarray<T>(0, t->numel());
+                // auto sh = t->shape();
+                // sh[dim]=1; auto fac = std::accumulate(sh.begin(), sh.end(), 1, std::multiplies<int>());
+                // // assertm(idxs.size()==incoming_grad->numel())
+                // / ERROR fix implementation here
+                std::valarray<size_t> dfs = {0, 2, 1, 2, 4, 4, 5, 5};
+                std::valarray<float> res = std::valarray((*t->data())[dfs]);
+                std::cout << res.size() << "\n";
+                // local_grad->set_data(new_d);
+                t->backward(local_grad);
+            }
+
+            this->_done = true;
+            ;
+        }
     };
 
     // template<class T>
@@ -594,13 +627,13 @@ namespace cyg
     //             auto output = functional::stack(ts, dim);
     //             if(output->requires_grad()) this->context->save_for_backward(ts);
     //             return output;
-    //         } 
+    //         }
     //     void backward(std::shared_ptr<T> incoming_grad) override
     //     {
     //         auto var = this->context->get_variables();
     //         // CHECK_BACKWARD(var, 3); //should be 3
-            
-    //         this->reset();   
+
+    //         this->reset();
     //     }
     // };
     // template <class T>

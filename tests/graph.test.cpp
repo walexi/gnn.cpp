@@ -7,6 +7,7 @@
 
 using namespace std;
 using namespace graph;
+using namespace cyg;
 
 const float tol = 1e-40;
 const auto compare = [](float a){ return fabs(a)<=tol;};
