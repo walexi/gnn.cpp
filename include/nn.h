@@ -58,10 +58,10 @@ namespace nn
     class Linear : public Module
     {
         // y = input_tensor(dd * in) * w(out * in).t() + c(out * 1)
-    public:
-        Linear(size_t in_features, size_t out_features, bool bias = true);
-        void reset_parameters();
-        cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
+        public:
+            Linear(size_t in_features, size_t out_features, bool bias = true);
+            void reset_parameters();
+            cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
 
         bool _bias;
         size_t _in_features, _out_features;
@@ -79,26 +79,27 @@ namespace nn
     // prevents non-saturation of gradients, speeds up sgd
     class ReLU : public Module
     {
-    public:
-        ReLU() : Module() { name = "ReLU"; }
-        cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
+        public:
+            ReLU() : Module() { name = "ReLU"; }
+            cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
     };
 
     // https://www.cs.toronto.edu/~hinton/absps/JMLRdropout.pdf
     class Dropout : public Module
     {
-    public:
-        Dropout(float p = 0.2);
-        cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
+        public:
+            Dropout(float p = 0.2);
+            cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
         float p;
     };
 
     cyg::tptr<float> softmax(const cyg::tptr<float> &input_tensor, int dim);
+    
     class Softmax : public Module
     {
-    public:
-        Softmax(int d) : Module(), _dim(d) { name = "Softmax"; }
-        cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
+        public:
+            Softmax(int d) : Module(), _dim(d) { name = "Softmax"; }
+            cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
         int _dim;
     };
 
@@ -106,10 +107,9 @@ namespace nn
     //     // normalizing layers to address covariate shift
     class BatchNorm : public Module
     {
-
-    public:
-        BatchNorm(size_t num_features, float eps = 1e-05, float momentum = 0.1, bool affine = true, bool track_running_stats = true);
-        cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
+        public:
+            BatchNorm(size_t num_features, float eps = 1e-05, float momentum = 0.1, bool affine = true, bool track_running_stats = true);
+            cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
 
         int _num_features;
         float _eps, _momentum;
@@ -118,9 +118,9 @@ namespace nn
 
     class LayerNorm : public Module
     {
-    public:
-        LayerNorm(size_t normalized_shape, float eps = 1e-05, bool elementwise_affine = true, bool bias = true);
-        cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
+        public:
+            LayerNorm(size_t normalized_shape, float eps = 1e-05, bool elementwise_affine = true, bool bias = true);
+            cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
 
         int _normalized_shape;
         float _eps;
@@ -132,16 +132,16 @@ namespace nn
 
     class Sigmoid : public Module
     {
-    public:
-        Sigmoid() : Module() { name = "Sigmoid"; }
-        cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
+        public:
+            Sigmoid() : Module() { name = "Sigmoid"; }
+            cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
     };
 
     class LogSoftmax : public Module
     {
-    public:
-        LogSoftmax(int dim) : Module(), _dim(dim) { name = "LogSoftmax"; }
-        cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
+        public:
+            LogSoftmax(int dim) : Module(), _dim(dim) { name = "LogSoftmax"; }
+            cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
 
         int _dim;
     };
@@ -149,9 +149,9 @@ namespace nn
     // https://arxiv.org/pdf/1609.04747
     class Optimizer
     {
-    public:
-        Optimizer(std::vector<cyg::tptr<float>> parameters) : _parameters(parameters) {}
-        void zero_grad();
+        public:
+            Optimizer(std::vector<cyg::tptr<float>> parameters) : _parameters(parameters) {}
+            void zero_grad();
 
         std::vector<cyg::tptr<float>> _parameters;
     };
@@ -161,10 +161,10 @@ namespace nn
     // https://pytorch.org/docs/stable/generated/torch.optim.SGD.html
     class SGD : Optimizer
     {
-    public:
-        SGD(std::vector<cyg::tptr<float>> parameters, float lr, float momentum = 0, float dampening = 0, float weight_decay = 0, bool nestorov = false)
-            : Optimizer(parameters), _lr(lr), _momentum(momentum), _dampening(dampening), _weight_decay(weight_decay), _nestorov(nestorov) {}
-        void step();
+        public:
+            SGD(std::vector<cyg::tptr<float>> parameters, float lr, float momentum = 0, float dampening = 0, float weight_decay = 0, bool nestorov = false)
+                : Optimizer(parameters), _lr(lr), _momentum(momentum), _dampening(dampening), _weight_decay(weight_decay), _nestorov(nestorov) {}
+            void step();
 
         float _lr, _dampening, _momentum, _weight_decay;
         bool _nestorov;
@@ -173,9 +173,9 @@ namespace nn
     // see chapter 4.6
     class Adam : Optimizer
     {
-    public:
-        Adam(std::vector<cyg::tptr<float>> parameters, float lr, float b1, float b2, float eps = 10 - 8);
-        void step();
+        public:
+            Adam(std::vector<cyg::tptr<float>> parameters, float lr, float b1, float b2, float eps = 10 - 8);
+            void step();
 
         float _lr, _b1, _b2, _eps;
         std::vector<std::valarray<float>> _velocity, _momentum;

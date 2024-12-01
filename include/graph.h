@@ -91,14 +91,14 @@ namespace graph
          */
         void set_mask(cyg::tensor<bool> &mask, DataType type = DataType::TRAIN);
 
-        cyg::tensor<bool> *_train_mask = nullptr;
-        cyg::tensor<bool> *_val_mask = nullptr;
-        cyg::tensor<bool> *_test_mask = nullptr;
-        size_t _num_nodes, _num_node_features, _num_edges, _num_edge_features;
-        cyg::tensor<int> *_adj_matrix = nullptr;
-        cyg::tensor<int> *_edge_index = nullptr;
-        cyg::tensor<float> *_y = nullptr;
-        cyg::tptr<float> _x, _edge_attr;
+    cyg::tensor<bool> *_train_mask = nullptr;
+    cyg::tensor<bool> *_val_mask = nullptr;
+    cyg::tensor<bool> *_test_mask = nullptr;
+    size_t _num_nodes, _num_node_features, _num_edges, _num_edge_features;
+    cyg::tensor<int> *_adj_matrix = nullptr;
+    cyg::tensor<int> *_edge_index = nullptr;
+    cyg::tensor<float> *_y = nullptr;
+    cyg::tptr<float> _x, _edge_attr;
     };
 
     class MessagePassing : public nn::Module
@@ -114,15 +114,15 @@ namespace graph
     // https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_gnn.html#the-messagepassing-base-class
     class GCNConv : public MessagePassing
     {
-    public:
-        GCNConv(size_t in_channels, size_t out_channels);
-        /**
-         * x shape [num_nodes, num_node_features]
-         * edge_index shape [2, num_edges]
-         */
-        cyg::tptr<float> forward(const cyg::tptr<float> &x, cyg::tensor<int> *edge_index_) override;
-        cyg::tptr<float> message(const cyg::tptr<float> &x, const cyg::tptr<float> &norm) override { return norm * x; } //  num_nodes * 1  *   num_nodes * num_node_features
-        cyg::tptr<float> aggregate_and_update(const cyg::tptr<float> &x, const cyg::tensor<int> &edge_index) override;
+        public:
+            GCNConv(size_t in_channels, size_t out_channels);
+            /**
+             * x shape [num_nodes, num_node_features]
+             * edge_index shape [2, num_edges]
+             */
+            cyg::tptr<float> forward(const cyg::tptr<float> &x, cyg::tensor<int> *edge_index_) override;
+            cyg::tptr<float> message(const cyg::tptr<float> &x, const cyg::tptr<float> &norm) override { return norm * x; } //  num_nodes * 1  *   num_nodes * num_node_features
+            cyg::tptr<float> aggregate_and_update(const cyg::tptr<float> &x, const cyg::tensor<int> &edge_index) override;
 
         size_t _in_channels, _out_channels;
     };
