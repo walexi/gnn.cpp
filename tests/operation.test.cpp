@@ -92,7 +92,7 @@ TEST_CASE("testing Pow")
     auto base = cyg::randn(dims, 3, 7, true);
     auto exponent = cyg::randn(dims, 1, 4, true);
     auto res_vec = std::pow(*base->data(), *exponent->data());
-    auto res = pow->forward(base, exponent); // prolly not the right way to do it, but i already checked the results with the torch equ
+    auto res = pow->forward(base, exponent); // checked the results with the torch eqv
     valarray<float> diff = *res->data() - res_vec;
     CHECK(all_of(begin(diff), end(diff), compare));
     auto incoming_gradients = make_shared<tensor<float>>(dims, 1, false);
@@ -116,20 +116,20 @@ TEST_CASE("testing Mean")
 
     int d = 0;
     auto res1 = m->forward(base, d, false);
-    auto res_t = functional::sum(base, d);
+    auto res_t = functional::sum(*base, d);
     std::valarray<float> diff = *res1->data() - (*(res_t / base->shape()[d])->data());
     // m->backward(cyg::randn(res1->shape()));
     CHECK(all_of(std::begin(diff), std::end(diff), compare));
 
     d = 1;
     auto res2 = m->forward(base, d, false);
-    auto res_t2 = functional::sum(base, d);
+    auto res_t2 = functional::sum(*base, d);
     std::valarray<float> diff2 = *res2->data() - (*(res_t2 / base->shape()[d])->data());
     CHECK(all_of(std::begin(diff2), std::end(diff2), compare));
 
     d = INT_MAX;
     auto res3 = m->forward(base, d);
-    auto res_t3 = functional::sum(base, d);
+    auto res_t3 = functional::sum(*base, d);
     diff = *res3->data() - (*(res_t3 / base->numel())->data());
     CHECK(all_of(std::begin(diff), std::end(diff), compare));
 }
@@ -221,9 +221,8 @@ TEST_CASE("testing MatMul")
     auto mat_op = make_shared<MatMul<tensor<float>>>();
     auto lhs = cyg::randn({1, 2, 3, 4}, -1, 1, true);
     auto rhs = cyg::randn({2, 4, 3}, -1, 1, true);
-    auto out = functional::matmul(lhs, rhs);
+    auto out = functional::matmul(*lhs, *rhs);
     auto res = mat_op->forward(lhs, rhs);
-
     auto incoming_gradients = cyg::randn(res->shape());
     mat_op->backward(incoming_gradients);
     // auto lhs_grad =  matmul<tensor<float>>(incoming_gradients, rhs->transpose(-1,-2));

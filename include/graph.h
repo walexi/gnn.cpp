@@ -276,12 +276,19 @@ namespace graph
              */
             tptr<float> forward(const tptr<float> &x, tensor<int>* edge_index_) override{
                 auto [edge_index, _] = add_self_loops(*edge_index_, nullptr, 0, x->shape()[0]);
-                auto out = (*get_module("lin"))(x);
+                auto out = (*get_module("lin"))(x); // num_nodes * out_channels
                 auto adj_mat = edge_to_adj_mat(*edge_index, nullptr, x->shape()[0]);
-                adj_mat->sum(-1, true, true); // get the degree nodes => N*1
-                auto norm  = adj_mat->pow(-0.5); // sqrt(deg(i))
-                out = propagate(*edge_index, out, norm);
-                out = out + get_parameter("bias");
+                auto deg = adj_mat->sum(-1, true) + 1; // get the nodes degree => N*1 add 1 for self loop
+               /**
+                *  sqrt(deg(i)) * sqrt(deg(j))  for each j in the neighborhood of i
+                * i.e i*j + i*k + i*l = i(j + k + l)
+                * deg * adj_mat(wo self loop)
+                * N*1 * N*N * N*1 = N * 1
+                */
+                deg = deg->pow(-0.5);  // sqrt(deg(i)) check for inf
+                auto norm = adj_mat->mm(deg); //
+                out = propagate(*edge_index, out, norm); // num_nodes * out_channels
+                out = out + get_parameter("bias"); // num_nodes * out_channels
 
                 return out;
             }
@@ -289,6 +296,7 @@ namespace graph
                 return norm * x; //  num_nodes * 1  *   num_nodes * num_node_features
             }
             tptr<float> aggregate_and_update(const tensor<int> &edge_index, const tptr<float> &x) override{
+                // add agg is implemented here
                 auto adj_mat = edge_to_adj_mat(edge_index, nullptr, x->shape()[0]); // num_nodes * num_nodes
                 auto agg_x = adj_mat->mm(x); // num_nodes * num_nodes o num_nodes * num_nodes_feature => num_nodes * num_nodes_feature
                 // agg_x = agg_x + x; //implm of self loop in forward precludes the need for this step

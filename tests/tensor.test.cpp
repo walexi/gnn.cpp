@@ -25,9 +25,9 @@ TEST_CASE("testing tensor")
     auto zeros_arr = initialize<float>(dims, 0);
     auto arr_int = initialize<int>(dims, 3);
     
-    CHECK_THROWS_WITH_AS(tensor<int>(dims, arr_int, Device::cpu, true), ERROR_GRAD_DTYPE, std::runtime_error); // setting grad on non-float dypes tensors
+    CHECK_THROWS_WITH_AS(tensor<int>(dims, arr_int, true), ERROR_GRAD_DTYPE, std::runtime_error); // setting grad on non-float dypes tensors
     
-    auto t1 = make_shared<tensor<float>>(dims, arr1, Device::cpu, true);
+    auto t1 = make_shared<tensor<float>>(dims, arr1, true);
     valarray<float> diff1 = *t1->data() - *arr2;
     CHECK_FALSE(all_of(begin(diff1), end(diff1), compare)); //check data
     
@@ -35,14 +35,14 @@ TEST_CASE("testing tensor")
     CHECK(all_of(begin(diff2), end(diff2), compare));
     
     vector<size_t> dims2 = {10,20};
-    CHECK_THROWS_WITH_AS(tensor<float>(dims2, arr1, Device::cpu, false), ERROR_SIZE_MISMATCH, std::runtime_error); //check sizemismatch
+    CHECK_THROWS_WITH_AS(tensor<float>(dims2, arr1, false), ERROR_SIZE_MISMATCH, std::runtime_error); //check sizemismatch
 
     cout<<"testing tensor grad"<<endl;
-    t1->enable_grad(true);
-    valarray<float> diff3 = *t1->get_grad() - *zeros_arr;
+    t1->requires_grad_(true);
+    valarray<float> diff3 = *t1->grad() - *zeros_arr;
     CHECK(all_of(begin(diff3), end(diff3), compare));
-    t1->enable_grad(false);
-    CHECK(t1->get_grad()==nullptr);
+    t1->requires_grad_(false);
+    CHECK(t1->grad()==nullptr);
     cout<<"testing squeeze and unsqueeze ops"<<endl;
     vector<size_t> dims3 = {1,1,1,2,3,4};
     auto t2 = make_shared<tensor<float>>(dims3, 1);
@@ -65,25 +65,31 @@ TEST_CASE("testing tensor")
     CHECK((*t2)(0, 0, 0) == (*t2->data())[0]);
 
     cout<< "addding tensors"<<"\n";
-    t1->enable_grad(true);
+    t1->requires_grad_(true);
     CHECK_THROWS_WITH_AS(t1 += 3, ERROR_IN_PLACE_OP_LEAF, std::runtime_error);
 
-    vector<size_t> dims9 = {8, 2,4,3};
 
-    auto dd3 = cyg::randn({8,2,4,3});
-    dd3->triu();
-    auto r  = dd3->argmax(-5);
-    // auto dd_transposed = dd3->transpose(-1, -2);
-    t2->enable_grad(true);
-    dd3->enable_grad(true);
-    auto dd4 = t2->mm(dd3);
+    auto lhs = cyg::randn({2,3}, 1, 3, true);
+    auto rhs = cyg::randn({2, 3,6}, 1, 3, true);
+    auto res = lhs->mm(rhs);
+    lhs->unsqueeze(0);
+    lhs->repeat(0, 5);
     // auto dd5 = dd4->sum();
-    dd4->backward(ones_like(dd4).get());
-    // cout<<*dd4<<endl;
+    // res->backward(ones_like(res).get());
+    cout<<*lhs<<endl;
+    cout<<*res<<endl;
+    cout<<*res->transpose(-1,-2)<<endl;
+    res->requires_grad_(false);
+    res->sum(-1, true, true);
+    cout<<*res<<endl;
+    // cout<<*lhs<<endl;
+    // cout<<*rhs<<endl;
+    // cout<<printND(*lhs->get_grad(), lhs->shape()).str()<<endl;
+    // cout<<printND(*rhs->get_grad(), rhs->shape()).str()<<endl;
     // t1->unsqueeze(0);
     // // t1 * float(2);
     // CHECK_THROWS_WITH_AS(t1+=t2, ERROR_SIZE_MISMATCH, std::runtime_error);
-    // auto t3 = cyg::randn(t2->shape(), -1, 1, Device::cpu, true);
+    // auto t3 = cyg::randn(t2->shape(), -1, 1, true);
     // CHECK_THROWS_WITH_AS(t3+=t2, ERROR_IN_PLACE_OP_LEAF, std::runtime_error);
     
 //     // cout<<"output here\n";
