@@ -32,8 +32,8 @@ tptr<float> graph::edge_to_adj_mat(const tensor<int> &edge_index, tensor<float> 
     {
         //  auto r = data[i];
         // auto c = data[i+num_edges];
-        int r = edge_index(0, i);
-        int c = edge_index(1, i);
+        int r = edge_index(0, i)->item();
+        int c = edge_index(1, i)->item();
         float w = 1;
         if (edge_attr != nullptr)
             w = (*edge_attr)[i]; // indexiing 1D tensor
@@ -58,13 +58,10 @@ tuple<tptr<int>, tptr<float>> graph::adj_to_edge_list(tensor<float> &adj_mat)
             w_mat.push_back(data[i]);
         }
     }
-    src.insert(src.end(), dst.begin(), dst.end());
-    auto edge_id_data = new valarray<int>(src.data(), src.size());
+    auto edge_index = vec_to_edge_list(src, dst);
     auto edge_attr_data = new valarray<float>(w_mat.data(), w_mat.size());
     vector<size_t> dims = {dst.size()};
     auto edge_attr = make_shared<tensor<float>>(dims, edge_attr_data, false);
-    dims.insert(dims.begin() + 0, 2);
-    auto edge_index = make_shared<tensor<int>>(dims, edge_id_data, false);
 
     return {edge_index, edge_attr};
 }

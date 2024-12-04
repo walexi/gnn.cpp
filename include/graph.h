@@ -21,7 +21,6 @@ namespace graph
      * @brief helper method to convert vectors of source and destination nodes to edge list representation
      * @param source(type vector<int>)
      * @param destination(type vector<int>)
-     *
      * @return edge list tensor (type tensor<int>) shape[2, num_edges]
      */
     cyg::tptr<int> vec_to_edge_list(std::vector<int> source, std::vector<int> destination);
@@ -30,7 +29,6 @@ namespace graph
      * @param edge_index(type tensor<int>) shape [2, *]
      * @param edge_attr(type tensor<float>) shape [*] Optional
      * @param n_nodes(tytpe int) Optional if not specified, the max value in edge_index will be used
-     *
      * @return adj_mat (type tensor<float>) shape [num_nodes, num_nodes]
      * fusing adj_mat with weight_mat so we have tensor<float> instead of int
      */
@@ -38,17 +36,13 @@ namespace graph
 
     /***
      * @brief adjacency matrix to edge list and edge attr if mat is filled with edge weight
-     *
      * @param adj_mat (type std::shared_ptr<float>) //
-     *
      * @return tuple(edge_index, edge_attr) shapes [2, num_edges] [num_edges]
-     *
      */
     std::tuple<cyg::tptr<int>, cyg::tptr<float>> adj_to_edge_list(cyg::tensor<float> &adj_mat);
 
     /**
      * @brief add self loops to graph, given the edge list rep
-     *
      * @param edge_index(type: tensor<int>)
      */
     std::tuple<cyg::tptr<int>, cyg::tptr<float>> add_self_loops(const cyg::tensor<int> &edge_index, cyg::tensor<float> *edge_attr = nullptr, const float &fillValue = 0, const int &num_nodes = 0);
@@ -76,7 +70,6 @@ namespace graph
         /**
          * @brief generates the fused adj matrix from the edge list rep of this data object
          * generate matrix on the fly
-         *
          * @return adj_mat (type std::shared_ptr<float>) shape [n_nodes, n_nodes]
          */
         cyg::tptr<float> to_adj();
@@ -126,18 +119,5 @@ namespace graph
 
         size_t _in_channels, _out_channels;
     };
-
-    // class GraphSAGE: public MessagePassing
-    // {
-    //     public:
-    //         GraphSAGE(int in_dim, int out_dim): MessagePassing(){
-    //         }
-    // }
-    // class GAT: public MessagePassing
-    // {
-    //     public:
-    //         GAT(int in_dim, int out_dim): MessagePassing(){
-    //         }
-    // }
 }
 #endif
