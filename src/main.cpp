@@ -11,10 +11,9 @@ class Model: public MessagePassing
     public:
         //n_layers should be about the graph diameter / using skip connections to mitigate the effect of oversmooting
         Model(size_t num_atoms, size_t embed_size, size_t out_channels, size_t p, bool bias, size_t n_layers=1): MessagePassing(){ 
-            register_module("embedding", new Embedding(num_atoms, embed_size)); // N * embed_size
+            register_module("embed", new Embedding(num_atoms, embed_size)); // N * embed_size
             register_module("pre", new MLP(embed_size, {embed_size*2, embed_size}, bias, p)); //preprocessing => N * embed_size
             for(auto i=0; i<n_layers; i++){
-
                 register_module("enc"+std::to_string(i+1), new GCNConv(embed_size, out_channels)); //
                 embed_size = out_channels;
             };
@@ -36,24 +35,22 @@ int main(void)
      * each protein is a graph, and it comprises a number of amino acids
      * each amino acid consists of 4 backbone atoms and a set of sidechain atoms (i will be ignoring the sidechains and backbone for this task) existing in some 3D space
      * so for a graph representing a protein
-     * i have n_i for every nodes in the grap representing each amino acid
+     * n_i for every nodes in the grap representing each amino acid
      * each n_i has an embedding h_v
      * 
      * so x = num_nodes * embedding_size
-     * where num_nodes is num of amino acids in the protein
      * 
      * the goal is to pass in the graphs of two proteins that form a complex into a model and output the binding affinity
      * 
-     * we will be using the SKEMPI/PDBBind dataset which gives us mutations carried on protein to protein complexes and their corresponding energies (dissociation constant, etc)
-     * 
      * we want our model to predict the binding affinty of the proteins we'll be designing -> lol ahaha
      * 
-     * in a way i want to understand the dynamics of some pertubations to the structural state of a protein with respect to some property of interest (in this case binding affinity) -  a topic for some other good day
-     * 
-     * this approach is oversimplified, so dont do this at home, lol
+     * this approach is oversimplified
      * 
      * using synthetic data to test my workflow
-     * then  use the SKEMPI/PDBBind dataset 
+     * use the SKEMPI/PDBBind dataset 
+     * 
+     * batch * 2 * num_atoms * 1               batch * 2 * 2 * num_edges?
+     * batch * 2 * num_atoms * embed_size      batch * 2 * 2 * num_edges?
      * 
      * i'm not taking the geometric features of the amino acids (contact residues in this case and the backbone/sidechain) into account
      * 
