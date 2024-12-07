@@ -170,9 +170,9 @@ graph::GCNConv::GCNConv(size_t in_channels, size_t out_channels, float dropout) 
 tptr<float> graph::GCNConv::forward(const Data &input)
 {
     auto [edge_index, _] = add_self_loops(*input.edge_index(), nullptr, 0, input.num_nodes());
-    auto out = (*get_module("lin"))(input._x); // num_nodes * out_channels
-    out = (*get_module("bnorm"))(input._x);
-    out = (*get_module("relu"))(input._x);
+    auto out = (*get_module("lin"))(input.x()); // num_nodes * out_channels
+    out = (*get_module("bnorm"))(input.x());
+    out = (*get_module("relu"))(input.x());
     auto adj_mat = edge_to_adj_mat(*edge_index, nullptr, input.num_nodes());
     auto deg = adj_mat->sum(-1, true) + 1; // get the nodes degree => N*1 add 1 for self loop
     /**
