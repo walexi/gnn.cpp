@@ -11,7 +11,6 @@ class Model: public MessagePassing
     public:
         //n_layers should be about the graph diameter, and i'll be using skip connections to mitigate the effect of oversmooting
         Model(size_t in_channels, size_t out_channels, size_t p, bool bias, size_t n_layers=1): MessagePassing(){ 
-            // thinking of sharing params btw p1 & p2, definitely not a good idea
             register_module("pre", new MLP(in_channels, {in_channels*2, in_channels}, bias, p)); //preprocessing
             for(auto i=0; i<n_layers; i++){
                 register_module("enc"+i+1, new GCNConv(in_channels, out_channels));
