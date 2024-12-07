@@ -126,7 +126,7 @@ tptr<float> graph::Data::to_adj()
     auto adj_mat = edge_to_adj_mat(*_edge_index, _edge_attr.get(), _num_nodes);
 
     return adj_mat;
-}
+};
 void graph::Data::set_mask(tensor<bool> &mask, DataType type)
 {
     if (mask.numel() != _num_nodes)
@@ -152,23 +152,28 @@ void graph::Data::set_mask(tensor<bool> &mask, DataType type)
 
 tptr<float> graph::MessagePassing::propagate(const tensor<int> &edge_index, const tptr<float> &x, const tptr<float> &others)
 {
-    auto out = message(x, others);
+    auto out = message(x, &others);
     out = aggregate_and_update(out, edge_index);
     return out;
 };
 
-graph::GCNConv::GCNConv(size_t in_channels, size_t out_channels) : MessagePassing(), _in_channels(in_channels), _out_channels(out_channels)
+graph::GCNConv::GCNConv(size_t in_channels, size_t out_channels, float dropout) : MessagePassing(), _in_channels(in_channels), _out_channels(out_channels), _dropout(dropout)
 {
     register_module("lin", new Linear(in_channels, out_channels, false));
+    register_module("bnorm", new BatchNorm(out_channels));
+    register_module("drop", new Dropout(dropout));
+    register_module("relu", new ReLU());
     auto dims = {out_channels};
     register_parameter("bias", make_shared<tensor<float>>(dims, 0, true));
 };
 
-tptr<float> graph::GCNConv::forward(const tptr<float> &x, tensor<int> *edge_index_)
+tptr<float> graph::GCNConv::forward(const Data &input)
 {
-    auto [edge_index, _] = add_self_loops(*edge_index_, nullptr, 0, x->shape()[0]);
-    auto out = (*get_module("lin"))(x); // num_nodes * out_channels
-    auto adj_mat = edge_to_adj_mat(*edge_index, nullptr, x->shape()[0]);
+    auto [edge_index, _] = add_self_loops(*input.edge_index(), nullptr, 0, input.num_nodes());
+    auto out = (*get_module("lin"))(input._x); // num_nodes * out_channels
+    out = (*get_module("bnorm"))(input._x);
+    out = (*get_module("relu"))(input._x);
+    auto adj_mat = edge_to_adj_mat(*edge_index, nullptr, input.num_nodes());
     auto deg = adj_mat->sum(-1, true) + 1; // get the nodes degree => N*1 add 1 for self loop
     /**
      * sqrt(deg(i)) * sqrt(deg(j))  for each j in the neighborhood of i
@@ -183,7 +188,7 @@ tptr<float> graph::GCNConv::forward(const tptr<float> &x, tensor<int> *edge_inde
     out = out + get_parameter("bias");       // num_nodes * out_channels
 
     return out;
-}
+};
 
 tptr<float> graph::GCNConv::aggregate_and_update(const tptr<float> &x, const tensor<int> &edge_index)
 {
@@ -192,4 +197,4 @@ tptr<float> graph::GCNConv::aggregate_and_update(const tptr<float> &x, const ten
     auto agg_x = adj_mat->mm(x);                                        // num_nodes * num_nodes o num_nodes * num_nodes_feature => num_nodes * num_nodes_feature
     // agg_x = agg_x + x; //implm of self loop in forward precludes the need for this step
     return agg_x;
-}
+};

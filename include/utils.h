@@ -92,7 +92,6 @@ void CHECK_EQUAL_SIZES(const std::vector<size_t> dims1, const std::vector<size_t
  * @return random number(type float)
  */
 float generate_random(const float &low, const float &high);
-
 /**
  * @brief calculate the index of an element in a flatten array given the ND dims/cordinates
  *
@@ -138,11 +137,8 @@ size_t get_index(std::vector<std::size_t> t_dims, std::vector<std::size_t> dims)
  */
 
 std::tuple<std::valarray<std::size_t>, std::valarray<std::size_t>> generate_idxs(const std::vector<std::size_t> tdims, int dim);
-
 bool is_broadcastable(const std::vector<size_t> &dims, const std::vector<size_t> &tdims);
-
 std::ostream &operator<<(std::ostream &out, const std::vector<size_t> input);
-
 /**
  * @brief use to create am array with the input dims and value,
  *

@@ -577,6 +577,7 @@ namespace cyg
     {
     public:
         Slice() : Operation<T>() { this->name = "Slice"; }
+        // template<typename ... A> std::shared_ptr<T> forward(const A& ...inputs)
         std::shared_ptr<T> forward(const std::shared_ptr<T> &t, const std::shared_ptr<T> &indices, int dim = -1) // temporarily cast indices to float, fix with herogenous containers
         {
             auto output = functional::slice<float, int>(*t, *indices, dim);
@@ -600,58 +601,18 @@ namespace cyg
             if (t->requires_grad())
             {
                 auto local_grad = t->clone(false, 0); // N*a..
-                // auto new_d =  new std::valarray<T>(0, t->numel());
-                // auto sh = t->shape();
-                // sh[dim]=1; auto fac = std::accumulate(sh.begin(), sh.end(), 1, std::multiplies<int>());
-                // // assertm(idxs.size()==incoming_grad->numel())
-                // / ERROR fix implementation here
-                std::valarray<size_t> dfs = {0, 2, 1, 2, 4, 4, 5, 5};
-                std::valarray<float> res = std::valarray((*t->data())[dfs]);
-                std::cout << res.size() << "\n";
-                // local_grad->set_data(new_d);
+                auto data = (*local_grad->data());
+                auto [strides, idxs] = generate_idxs(t->shape(), dim);
+                for(auto i=0; auto idx: idxs){
+                    auto sl = std::slice(idx, t->shape()[dim], strides[dim]);
+                    std::valarray<float> dat = data[sl];
+                    auto id = (int)(*indices)[i];
+                    dat[id] = (*incoming_grad)[i++];
+                };
                 t->backward(local_grad);
             }
-
             this->_done = true;
-            ;
         }
     };
-
-    // template<class T>
-    // class Stack : public Operation<T>
-    // {
-    //     public:
-    //         Stack() : Operation<T>() {this->name="Stack";}
-    //         std::shared_ptr<T> forward(const std::vector<std::shared_ptr<T>> ts, int dim=0)
-    //         {
-    //             auto output = functional::stack(ts, dim);
-    //             if(output->requires_grad()) this->context->save_for_backward(ts);
-    //             return output;
-    //         }
-    //     void backward(std::shared_ptr<T> incoming_grad) override
-    //     {
-    //         auto var = this->context->get_variables();
-    //         // CHECK_BACKWARD(var, 3); //should be 3
-
-    //         this->reset();
-    //     }
-    // };
-    // template <class T>
-    // class Cos : public Operation<T>
-    // {
-    // public:
-    //     Cos() : Operation<T>() {}
-    //     std::shared_ptr<T> forward(const std::shared_ptr<T>& v1);
-    //     void backward(std::valarray<float> *incoming_grad) override;
-    // };
-
-    // template <class T>
-    // class Sin : public Operation<T>
-    // {
-    // public:
-    //     Sin() : Operation<T>() {}
-    //     std::shared_ptr<T> forward(const std::shared_ptr<T>& v1);
-    //     void backward(std::valarray<float> *incoming_grad) override;
-    // };
 };
 #endif

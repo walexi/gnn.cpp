@@ -69,6 +69,21 @@ cyg::tptr<float> nn::Module::operator()(const cyg::tptr<float> &input_tensor, cy
     return forward(input_tensor, y);
 };
 
+std::vector<std::pair<std::string, std::shared_ptr<Module>>> nn::Module::modules(const bool &recurse) const
+{
+    vector<std::pair<std::string, std::shared_ptr<Module>>> res;
+    // if (_modules.size() == 0)
+    // {
+    //     for (const auto &[n, p] : _parameters)
+    //         res.push_back(p);
+    // };
+    // for (const auto &[n, m] : _modules)
+    // {
+    //     auto m_res = m->parameters(recurse);
+    //     res.insert(res.end(), m_res.begin(), m_res.end());
+    // }
+    return res;}
+
 vector<tptr<float>> nn::Module::parameters(const bool &recurse) const
 {
     vector<tptr<float>> res;

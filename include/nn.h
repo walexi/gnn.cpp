@@ -44,16 +44,15 @@ namespace nn
         virtual cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) { throw std::runtime_error("not implemented"); };
         virtual cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor, cyg::tensor<int> *y) { throw std::runtime_error("not implemented"); };
         Module(const Module &m) : _modules(m._modules), _parameters(m._parameters), _buffers(m._buffers) {}; // rule of three/five/zero
-        std::vector<std::pair<std::string, std::shared_ptr<Module>>> modules() const { return _modules; }
+        std::vector<std::pair<std::string, std::shared_ptr<Module>>> modules(const bool &recurse = true) const;
         std::vector<cyg::tptr<float>> parameters(const bool &recurse = true) const;
         std::vector<cyg::tptr<float>> buffers(const bool &recurse = true) const; // can be float, int, bool, trying to avoid templating Module, btw any other type can be easily cast to float
         ~Module();
-
-    protected:
-        std::vector<std::pair<std::string, std::shared_ptr<Module>>> _modules;
-        std::unordered_map<std::string, cyg::tptr<float>> _parameters;
-        std::unordered_map<std::string, cyg::tptr<float>> _buffers;
-    };
+    
+    std::vector<std::pair<std::string, std::shared_ptr<Module>>> _modules;
+    std::unordered_map<std::string, cyg::tptr<float>> _parameters;
+    std::unordered_map<std::string, cyg::tptr<float>> _buffers;
+};
 
     class Linear : public Module
     {
@@ -72,6 +71,7 @@ namespace nn
     public:
         Sequential() : Module() {};
         Sequential(std::vector<std::pair<std::string, Module *>> input);
+        void add_module(std::string n, Module* m){ register_module(n, m);}
         cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
     };
 
@@ -183,5 +183,28 @@ namespace nn
     // https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
     // logits = N * C   targets = N
     cyg::tptr<float> cross_entropy_loss(const cyg::tptr<float> logits, const cyg::tptr<int> target);
+
+    class MLP: public Module
+    {
+        public:
+            MLP(size_t in_channel, std::vector<size_t> hid_dims, const bool& bias=true, const float& dropout=0.0){
+                auto seq = new Sequential();
+                for(auto i=0; auto hid_dim:hid_dims){
+                    auto i_s = std::to_string(i);
+                    seq->add_module("lin_"+ i_s, new Linear(in_channel, hid_dim, bias));
+                    if(hid_dim!=hid_dims[hid_dims.size()-1])
+                    { 
+                        seq->add_module("lnorm_"+i_s, new LayerNorm(hid_dim));
+                        seq->add_module("relu_"+i_s, new ReLU());
+                    }
+                    seq->add_module("drop_"+ i_s, new Dropout(dropout));
+                    in_channel = hid_dim; i++;
+                }
+                register_module("seq", seq);
+            }
+            cyg::tptr<float> forward(const cyg::tptr<float> &input){
+                return (*get_module("seq"))(input);
+            };
+    };
 }
 #endif

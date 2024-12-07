@@ -22,8 +22,7 @@ namespace functional
      * the max val can be computed along a dimension or over all the elements (if no dim is specified)
      */
     template <class T>
-    tuple<shared_ptr<cyg::tensor<T>>, shared_ptr<cyg::tensor<int>>> max(const cyg::tensor<T> &input_tensor, int dim = INT_MAX, const bool &keepdim = false)
-    {
+    tuple<shared_ptr<cyg::tensor<T>>, shared_ptr<cyg::tensor<int>>> max(const cyg::tensor<T> &input_tensor, int dim = INT_MAX, const bool &keepdim = false){
         vector<size_t> new_dims;
         valarray<int> id_data;
 
@@ -69,7 +68,8 @@ namespace functional
         auto indices_tensor = std::make_shared<cyg::tensor<int>>(new_dims, max_idxs, false);
 
         return {value_tensor, indices_tensor};
-    }
+    };
+    
     /**
      * computes elements wise maximum of the given tensors
      * tensors sizes must be the same
@@ -173,11 +173,13 @@ namespace functional
             lhs_data = *lhs.data();
             rhs_data = *rhs.data();
             broadcast(&lhs_data, lhs.shape(), &rhs_data, rhs.shape(), &new_dims);
+            // device::add(out_data, lhs_data, rhs_data);
             *out_data = lhs_data + rhs_data;
         }
         else
         {
             CHECK_EQUAL_SIZES(rhs.shape(), lhs.shape());
+            // device::add(out_data, lhs_data, rhs_data);
             *out_data = *lhs.data() + *rhs.data();
             new_dims = lhs.shape();
         }
@@ -490,29 +492,8 @@ namespace functional
         {
             (*new_d)[i] = std::valarray((*t.data())[std::slice(idxs[i], t.shape()[dim], strides[dim])])[indices[i]];
         }
-
         return std::make_shared<cyg::tensor<T>>(indices.shape(), new_d, t.requires_grad());
     }
-
-    template <class T>
-    std::shared_ptr<cyg::tensor<T>> stack(const std::vector<cyg::tensor<T> *> ts, int dim)
-    {
-        //     //cyg::no_grad({ts}, true);
-        //     if(dim<0) dim = new_dims.size()+1+dim: dim;
-        //     auto new_dims = ts[0]->shape();
-        //     new_dims.insert(new_dims.begin()+dim, ts.size());
-        //     const auto [strides, idxs] = generate_idxs(new_dims, dim);
-        //     int numels = strides[0] * new_dims[0];
-        //     auto out_data = new std::valarray<T>(numels);
-        //     int n_elems = ts[0]->shape()[dim];
-        //     for(const auto& idx:idxs){
-        //         for(auto t:ts)
-        //           valarray(t[std::slice(0, t->shape()[dim-1], strides[dim])]);
-        //             out_data[std::slice(idx, new_dims[dim], strides[dim])] = valarray()
-        //     }
-        //     cyg::no_grad({ts}, false);
-        return std::shared_ptr<cyg::tensor<T>>();
-    };
 }
 
 #endif
