@@ -10,11 +10,13 @@ class Model: public MessagePassing
 {
     public:
         //n_layers should be about the graph diameter / using skip connections to mitigate the effect of oversmooting
-        Model(size_t in_channels, size_t out_channels, size_t p, bool bias, size_t n_layers=1): MessagePassing(){ 
-            register_module("pre", new MLP(in_channels, {in_channels*2, in_channels}, bias, p)); //preprocessing
+        Model(size_t num_atoms, size_t embed_size, size_t out_channels, size_t p, bool bias, size_t n_layers=1): MessagePassing(){ 
+            register_module("embedding", new Embedding(num_atoms, embed_size)); // N * embed_size
+            register_module("pre", new MLP(embed_size, {embed_size*2, embed_size}, bias, p)); //preprocessing => N * embed_size
             for(auto i=0; i<n_layers; i++){
-                register_module("enc"+i+1, new GCNConv(in_channels, out_channels));
-                in_channels = out_channels;
+
+                register_module("enc"+std::to_string(i+1), new GCNConv(embed_size, out_channels)); //
+                embed_size = out_channels;
             };
             register_module("post", new MLP(out_channels*2, {out_channels*4, out_channels*2, out_channels}, bias, p)); //postprocessing
             register_module("drop", new Dropout(p));
