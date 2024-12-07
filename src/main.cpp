@@ -51,9 +51,7 @@ int main(void)
      * 
      * batch * 2 * num_atoms * 1               batch * 2 * 2 * num_edges?
      * batch * 2 * num_atoms * embed_size      batch * 2 * 2 * num_edges?
-     * 
-     * i'm not taking the geometric features of the amino acids (contact residues in this case and the backbone/sidechain) into account
-     * 
+     *      * 
      */
     return 0;
 };
