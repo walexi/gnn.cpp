@@ -38,6 +38,6 @@ TEST_CASE("testing g")
     std::cout<<*data.to_adj()<<"\n";
 
     auto m = GCNConv(nodes_feat, 20);
-    auto out = m(x, edge_list.get());
+    auto out = m(data);
     std::cout<<*out<<"\n";
 };
