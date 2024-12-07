@@ -103,7 +103,7 @@ namespace graph
         MessagePassing() {}
         virtual cyg::tptr<float> message(const cyg::tptr<float> &x, const cyg::tptr<float>* others=nullptr){ return  x; };
         virtual cyg::tptr<float> aggregate_and_update(const cyg::tptr<float> &x, const cyg::tensor<int> &edge_index) { throw std::runtime_error("not yet implemented"); };
-        template<typename... T> cyg::tptr<float> operator()(const T&...input) { return forward(input...); };
+        // template<typename... T> cyg::tptr<float> operator()(const T&...input) { return forward(input...); };//std::forward
         virtual cyg::tptr<float> forward(const Data &input) { throw std::runtime_error("not yet implemented");}
         virtual cyg::tptr<float> forward(const Data &input, const Data &input2) { throw std::runtime_error("not yet implemented");}
         cyg::tptr<float> propagate(const cyg::tensor<int> &edge_index, const cyg::tptr<float> &x, const cyg::tptr<float> &others);

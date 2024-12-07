@@ -12,25 +12,16 @@ class Model: public MessagePassing
         //n_layers should be about the graph diameter, and i'll be using skip connections to mitigate the effect of oversmooting
         Model(size_t in_channels, size_t out_channels, size_t p, bool bias, size_t n_layers=1): MessagePassing(){ 
             // thinking of sharing params btw p1 & p2, definitely not a good idea
-            register_module("p1_pre", new MLP(in_channels, {in_channels*2, in_channels}, bias, p)); //preprocessing
-            register_module("p2_pre", new MLP(in_channels, {in_channels*2, in_channels}, bias, p));
+            register_module("pre", new MLP(in_channels, {in_channels*2, in_channels}, bias, p)); //preprocessing
             for(auto i=0; i<n_layers; i++){
-                register_module("p1_enc"+i+1, new GCNConv(in_channels, out_channels));
-                register_module("p2_enc"+i+1, new GCNConv(in_channels, out_channels));
+                register_module("enc"+i+1, new GCNConv(in_channels, out_channels));
                 in_channels = out_channels;
             };
             register_module("post", new MLP(out_channels*2, {out_channels*4, out_channels*2, out_channels}, bias, p)); //postprocessing
             register_module("drop", new Dropout(p));
             register_module("relu", new ReLU());
         };
-        tptr<float> forward(const Data &p1, const Data &p2) {
-            // auto out_p1 = (*get_module("p1_pre"))(p1._x);
-            // auto out_p2 = (*get_module("p2_pre"))(p2._x);
-            // for(auto [n,m]: _modules){
-            //     out_p1 = (*m)(out_p1);
-            //     out_p2 = (*m)(out_p2);
-                
-            // }
+        tptr<float> forward(const Data &p) {
                 return tptr<float>();
         };
 };

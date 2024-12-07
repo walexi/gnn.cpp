@@ -39,13 +39,15 @@ namespace nn
         void train(const bool &isTrain = true);
         cyg::tptr<float> get_parameter(std::string name);
         cyg::tptr<float> get_buffer(std::string name);
-        Module *get_module(std::string name);
+        std::shared_ptr<Module> get_module(std::string name);
         cyg::tptr<float> operator()(const cyg::tptr<float> &input_tensor, cyg::tensor<int> *y = nullptr);
         virtual cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) { throw std::runtime_error("not implemented"); };
         virtual cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor, cyg::tensor<int> *y) { throw std::runtime_error("not implemented"); };
         Module(const Module &m) : _modules(m._modules), _parameters(m._parameters), _buffers(m._buffers) {}; // rule of three/five/zero
-        std::vector<std::pair<std::string, std::shared_ptr<Module>>> modules(const bool &recurse = true) const;
+        std::vector<std::shared_ptr<Module>> modules(const bool &recurse = true) const;
+        std::unordered_map<std::string, std::shared_ptr<Module>> named_modules(const bool &recurse = true) const;
         std::vector<cyg::tptr<float>> parameters(const bool &recurse = true) const;
+        std::unordered_map<std::string, cyg::tptr<float>> named_parameters(const bool &recurse = true) const;
         std::vector<cyg::tptr<float>> buffers(const bool &recurse = true) const; // can be float, int, bool, trying to avoid templating Module, btw any other type can be easily cast to float
         ~Module();
     
@@ -205,6 +207,17 @@ namespace nn
             cyg::tptr<float> forward(const cyg::tptr<float> &input){
                 return (*get_module("seq"))(input);
             };
+    };
+
+    class Embedding: public Module
+    {
+        public: 
+            Embedding(const size_t &num_embeddings, const size_t &embedding_dim, const size_t &padding_idx = 0, const bool &_freeze=false);
+            cyg::tptr<float> forward(const cyg::tptr<int> &idx);
+            // cyg::tptr<float> weight() const {return _weight;};
+        // cyg::tptr<float> _embd;
+        size_t _num_embeddings, _embedding_dim, _padding_idx;
+        bool _freeze;
     };
 }
 #endif
