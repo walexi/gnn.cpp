@@ -28,10 +28,8 @@ class Model: public MessagePassing
 
 int main(void)
 {
-    
     /**
      * i will be training a simple model for binding affinity prediction - i love this :=)
-     * i will be representing proteins on an atomic level
      * each protein is a graph, and it comprises a number of amino acids
      * each amino acid consists of 4 backbone atoms and a set of sidechain atoms (i will be ignoring the sidechains and backbone for this task) existing in some 3D space
      * so for a graph representing a protein
@@ -42,16 +40,17 @@ int main(void)
      * 
      * the goal is to pass in the graphs of two proteins that form a complex into a model and output the binding affinity
      * 
-     * we want our model to predict the binding affinty of the proteins we'll be designing -> lol ahaha
+     * when proteins bind to a target protein, the aa within some short distance from the aa of the target are called contact residues (complimentary determining region)
+     * and determine the binding affinity
      * 
      * this approach is oversimplified
      * 
      * using synthetic data to test my workflow
      * use the SKEMPI/PDBBind dataset 
      * 
-     * batch * 2 * num_atoms * 1               batch * 2 * 2 * num_edges?
-     * batch * 2 * num_atoms * embed_size      batch * 2 * 2 * num_edges?
-     *      * 
+     * batch * 2 * num_aa * 1               batch * 2 * 2 * num_edges?
+     * batch * 2 * num_aa * embed_size      batch * 2 * 2 * num_edges?
+     *  
      */
     return 0;
 };
