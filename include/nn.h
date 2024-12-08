@@ -25,7 +25,7 @@ namespace nn
     //         }
     // };
 
-    class Module
+    class Module : public std::enable_shared_from_this<Module>
     {
     public:
         Module() {};
@@ -44,10 +44,11 @@ namespace nn
         virtual cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) { throw std::runtime_error("not implemented"); };
         virtual cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor, cyg::tensor<int> *y) { throw std::runtime_error("not implemented"); };
         Module(const Module &m) : _modules(m._modules), _parameters(m._parameters), _buffers(m._buffers) {}; // rule of three/five/zero
-        std::vector<std::shared_ptr<Module>> modules(const bool &recurse = true) const;
-        std::unordered_map<std::string, std::shared_ptr<Module>> named_modules(const bool &recurse = true) const;
-        std::vector<cyg::tptr<float>> parameters(const bool &recurse = true) const;
-        std::unordered_map<std::string, cyg::tptr<float>> named_parameters(const bool &recurse = true) const;
+        std::vector<std::shared_ptr<Module>> modules(const bool &recurse = true);
+        std::unordered_map<std::string, std::shared_ptr<Module>> named_modules(const bool &recurse = true);
+        std::vector<cyg::tptr<float>> parameters(const bool &recurse = true);
+        std::unordered_map<std::string, cyg::tptr<float>> named_parameters(const bool &recurse = true);
+        std::unordered_map<std::string, cyg::tptr<float>> named_buffers(const bool &recurse = true) const;
         std::vector<cyg::tptr<float>> buffers(const bool &recurse = true) const; // can be float, int, bool, trying to avoid templating Module, btw any other type can be easily cast to float
         ~Module();
     
@@ -72,7 +73,7 @@ namespace nn
     {
     public:
         Sequential() : Module() {};
-        Sequential(std::vector<std::pair<std::string, Module *>> input);
+        Sequential(std::vector<std::pair<std::string, Module*>> input);
         void add_module(std::string n, Module* m){ register_module(n, m);}
         cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
     };

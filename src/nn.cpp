@@ -1,5 +1,6 @@
 #include <memory>
 #include <vector>
+#include <ranges>
 #include "nn.h"
 #include "operation.h"
 #include "util.h"
@@ -40,27 +41,25 @@ void nn::Module::train(const bool &isTrain)
 }
 cyg::tptr<float> nn::Module::get_parameter(std::string name)
 {
-    if (_parameters.find(name) == _parameters.end())
+    auto params = named_parameters();
+    if (params.find(name) == params.end())
         throw runtime_error("invalid input, no parameter with given name");
 
-    return _parameters[name];
+    return params[name];
 }
 cyg::tptr<float> nn::Module::get_buffer(std::string name)
 {
     if (_buffers.find(name) == _buffers.end())
-        throw runtime_error("invalid input, no parameter with given name");
+        throw runtime_error("invalid input, no buffer with given name");
 
     return _buffers[name];
 }
-Module *nn::Module::get_module(std::string name)
+std::shared_ptr<Module> nn::Module::get_module(std::string name)
 {
-    const auto it = find_if(_modules.begin(), _modules.end(), [&](const auto &p)
-                            { return get<0>(p) == name; });
-    if (it == _modules.end())
-    {
-        throw runtime_error("invalid input, no mdule with given name");
-    }
-    return get<1>(*it).get();
+    auto modules = named_modules();
+    if (modules.find(name) == modules.end())
+        throw runtime_error("invalid input, no Module with given name");
+    return modules[name];
 }
 cyg::tptr<float> nn::Module::operator()(const cyg::tptr<float> &input_tensor, cyg::tensor<int> *y)
 {
@@ -69,60 +68,76 @@ cyg::tptr<float> nn::Module::operator()(const cyg::tptr<float> &input_tensor, cy
     return forward(input_tensor, y);
 };
 
-std::vector<std::pair<std::string, std::shared_ptr<Module>>> nn::Module::modules(const bool &recurse) const
+std::vector<std::shared_ptr<Module>> nn::Module::modules(const bool &recurse)
 {
-    vector<std::pair<std::string, std::shared_ptr<Module>>> res;
-    // if (_modules.size() == 0)
-    // {
-    //     for (const auto &[n, p] : _parameters)
-    //         res.push_back(p);
-    // };
-    // for (const auto &[n, m] : _modules)
-    // {
-    //     auto m_res = m->parameters(recurse);
-    //     res.insert(res.end(), m_res.begin(), m_res.end());
-    // }
-    return res;}
+    auto n_modules = named_modules(recurse);
+    vector<std::shared_ptr<Module>> modules;
+    for(const auto &[n, m]: n_modules) modules.push_back(m);
+    
+    return modules;
+}
 
-vector<tptr<float>> nn::Module::parameters(const bool &recurse) const
+std::unordered_map<std::string, std::shared_ptr<Module>> nn::Module::named_modules(const bool &recurse)
 {
-    vector<tptr<float>> res;
-    if (_modules.size() == 0)
-    {
-        for (const auto &[n, p] : _parameters)
-            res.push_back(p);
-    };
+    std::unordered_map<std::string, std::shared_ptr<Module>> res;
+    if(!recurse || _modules.size()==0) return {{name, this->shared_from_this()}};
+
     for (const auto &[n, m] : _modules)
     {
-        auto m_res = m->parameters(recurse);
-        res.insert(res.end(), m_res.begin(), m_res.end());
-    }
-    return res;
-};
-vector<tptr<float>> nn::Module::buffers(const bool &recurse) const
-{
-    vector<tptr<float>> res;
-    if (_buffers.size() == 0)
-    {
-        for (const auto &[n, p] : _buffers)
-            res.push_back(p);
+        auto m_res = m->named_modules(recurse);
+        for(const auto& [n_m, m_]: m_res) res[n + "_" + n_m] = m_;
     };
+    return res;
+}
+vector<tptr<float>> nn::Module::parameters(const bool &recurse)
+{
+    auto n_params = named_parameters(recurse);
+    vector<tptr<float>> params;
+    for(const auto &[n,p]: n_params) params.push_back(p);
+    return params;
+};
+std::unordered_map<std::string, cyg::tptr<float>> nn::Module::named_parameters(const bool &recurse)
+{
+    std::unordered_map<std::string, cyg::tptr<float>> res;
+    if(!recurse || _modules.size()==0) return _parameters;
+
     for (const auto &[n, m] : _modules)
     {
-        auto m_res = m->buffers(recurse);
-        res.insert(res.end(), m_res.begin(), m_res.end());
-    }
+        auto m_res = m->named_parameters(recurse);
+        for(const auto& [n_p, p]: m_res) res[n + "_" + n_p] = p;
+    };
     return res;
 };
+
+std::unordered_map<std::string, cyg::tptr<float>> nn::Module::named_buffers(const bool &recurse) const
+{
+    std::unordered_map<std::string, cyg::tptr<float>> res;
+    if(!recurse || _modules.size()==0) return _buffers;
+    
+    for (const auto &[n, m] : _modules)
+    {
+        auto m_res = m->named_buffers(recurse);
+        for(const auto& [n_p, b]: m_res) res[n + "_" + n_p] = b;
+    };
+    return res;
+};
+std::vector<cyg::tptr<float>> nn::Module::buffers(const bool &recurse) const
+{
+    auto n_buffers = named_buffers(recurse);
+    vector<tptr<float>> buffers;
+    for(const auto &[n, b]: n_buffers) buffers.push_back(b);
+
+    return buffers;
+}
 nn::Module::~Module()
 {
     _parameters.clear();
     _modules.clear();
 };
 
-ostream &operator<<(ostream &out, const Module &module)
+ostream &operator<<(ostream &out, Module &module)
 {
-    auto modules = module.modules();
+    auto modules = module.named_modules();
     if (!modules.empty())
     {
         for (const auto &[name, m] : modules)
@@ -139,18 +154,16 @@ ostream &operator<<(ostream &out, const Module &module)
             out << "<<<<<<<<<<<<<<<<<<<<<<<<<" << "\n";
         };
     }
-    auto params = module.parameters();
+    auto params = module.named_parameters();
     if (!params.empty())
     {
         out << "Module " << module.name << "\n";
         out << "<<<<<<<<<<<<<<<<<<<<<<<<<" << "\n";
         out << "Parameters " << "\n";
-        for (const auto &p : params)
+        for (const auto &[n, p] : params)
         {
-            out << "size =( ";
-            for (auto s : p->shape())
-                out << s << " ";
-            out << ")\n";
+            out << n<<" ";
+            out << p->shape() << "\n";
         }
     }
     return out;
@@ -427,3 +440,11 @@ inline cyg::tptr<float> nn::cross_entropy_loss(const cyg::tptr<float> logits, co
     out->grad_fn->name = "CrossEntropy";
     return out;
 };
+
+nn::Embedding::Embedding(const size_t &num_embeddings, const size_t &embedding_dim, const size_t &padding_idx, const bool &_freeze)
+{}
+
+cyg::tptr<float> nn::Embedding::forward(const cyg::tptr<int> &idx)
+{
+    return cyg::tptr<float>();
+}
