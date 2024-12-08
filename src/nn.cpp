@@ -229,7 +229,6 @@ tptr<float> nn::Sequential::forward(const tptr<float> &input_tensor)
 cyg::tptr<float> nn::ReLU::forward(const cyg::tptr<float> &input_tensor)
 {
     auto condition = input_tensor > 0.0;
-    std::cout<<condition->shape()<<"\n";
     // auto mask = zeros->where(input_tensor>0.0f, 1.0f); // max(0, x)  y = x if x>0 else 0;
     // auto output = functional::abs(input_tensor * mask); //using abs to handle -ve float, no side effect on backprop of input_tensor
     auto output = input_tensor->where(condition, 0.0f);
