@@ -103,9 +103,9 @@ namespace graph
         MessagePassing() {}
         virtual cyg::tptr<float> message(const cyg::tptr<float> &x, const cyg::tptr<float>* others=nullptr){ return  x; };
         virtual cyg::tptr<float> aggregate_and_update(const cyg::tptr<float> &x, const cyg::tensor<int> &edge_index) { throw std::runtime_error("not yet implemented"); };
-        // template<typename... T> cyg::tptr<float> operator()(const T&...input) { return forward(input...); };//std::forward
-        virtual cyg::tptr<float> forward(const Data &input) { throw std::runtime_error("not yet implemented");}
-        virtual cyg::tptr<float> forward(const Data &input, const Data &input2) { throw std::runtime_error("not yet implemented");}
+        template<typename... T> cyg::tptr<float> operator()(T&...input) { return forward(std::forward<T>(input)...); };//std::forward
+        virtual cyg::tptr<float> forward(Data &&input) { throw std::runtime_error("not yet implemented");}
+        virtual cyg::tptr<float> forward(Data &&input, Data &input2) { throw std::runtime_error("not yet implemented");}
         cyg::tptr<float> propagate(const cyg::tensor<int> &edge_index, const cyg::tptr<float> &x, const cyg::tptr<float> &others);
     };
 
@@ -118,7 +118,7 @@ namespace graph
              * x shape [num_nodes, num_node_features]
              * edge_index shape [2, num_edges]
              */
-            cyg::tptr<float> forward(const Data & input) override;
+            cyg::tptr<float> forward(Data && input) override;
             cyg::tptr<float> message(const cyg::tptr<float> &x, const cyg::tptr<float>* norm) override { return *norm * (*get_module("drop"))(x); } //  num_nodes * 1  *   num_nodes * num_node_features
             cyg::tptr<float> aggregate_and_update(const cyg::tptr<float> &x, const cyg::tensor<int> &edge_index) override;
 

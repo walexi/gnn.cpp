@@ -76,13 +76,13 @@ namespace cyg
             CHECK_ARGS_IN_PLACE_OPS(*lhs);
             return lhs /= (std::make_shared<tensor<T>>(lhs->shape(), static_cast<T>(rhs), false));
         };
-        friend tptr<bool> operator>(tptr<T> lhs, const tptr<T> &rhs)
+        friend tptr<bool> operator>(const tptr<T> lhs, const tptr<T> &rhs)
         {
             return lhs->gt(rhs);
         };
-        friend tptr<bool> operator>(tptr<T> lhs, const float &rhs)
+        friend tptr<bool> operator>(const tptr<T> lhs, const float &rhs)
         {
-            return lhs > rhs;
+            return lhs->gt(rhs);
         };
         friend tptr<bool> operator<(tptr<T> lhs, const tptr<T> &rhs)
         {
@@ -725,7 +725,7 @@ namespace cyg
         std::shared_ptr<tensor<bool>> gt(const tptr<T> &other)
         {
             CHECK_ARGS_OPS_BROADCAST(this->shape(), other->shape());
-            return functional::gt(*this, *other);
+            return functional::gt(*this, other);
         }
         /**
          * @brief >t2
@@ -735,7 +735,7 @@ namespace cyg
         std::shared_ptr<tensor<bool>> gt(const float &other)
         {
             auto other_tensor = tensor<T>(this->_dims, static_cast<T>(other), false);
-            return functional::gt(*this, &other_tensor);
+            return functional::gt(*this, other_tensor);
         }
         /**
          * @brief t1<t2
@@ -745,7 +745,7 @@ namespace cyg
         std::shared_ptr<tensor<bool>> lt(const tptr<T> &other)
         {
             CHECK_ARGS_OPS_BROADCAST(this->shape(), other->shape());
-            return functional::gt(*other, &this);
+            return functional::gt(other, *this);
         }
 
         /**

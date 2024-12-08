@@ -14,6 +14,11 @@ void nn::Module::register_parameter(string name, tptr<float> p)
     if (!p->requires_grad() || p->grad_fn)
         throw runtime_error("cannot add tensor as param, tensor requires_grad must be set to true and tensor must be non-leaf - explicitly created");
     _parameters[name] = p;
+}
+void nn::Module::register_buffer(std::string name, cyg::tptr<float> b) {
+    if (b->requires_grad() || b->grad_fn)
+        throw runtime_error("cannot add tensor as buffer, tensor requires_grad must be set to false and tensor must be non-leaf - explicitly created");
+    _buffers[name] = b;
 };
 
 void nn::Module::zero_grad()
@@ -49,14 +54,16 @@ cyg::tptr<float> nn::Module::get_parameter(std::string name)
 }
 cyg::tptr<float> nn::Module::get_buffer(std::string name)
 {
-    if (_buffers.find(name) == _buffers.end())
+    auto buffers = named_buffers();
+    if (buffers.find(name) == buffers.end())
         throw runtime_error("invalid input, no buffer with given name");
 
-    return _buffers[name];
+    return buffers[name];
 }
 std::shared_ptr<Module> nn::Module::get_module(std::string name)
 {
     auto modules = named_modules();
+    // std::cout<<"size="<<modules.size()<<"\n";
     if (modules.find(name) == modules.end())
         throw runtime_error("invalid input, no Module with given name");
     return modules[name];
@@ -85,7 +92,11 @@ std::unordered_map<std::string, std::shared_ptr<Module>> nn::Module::named_modul
     for (const auto &[n, m] : _modules)
     {
         auto m_res = m->named_modules(recurse);
-        for(const auto& [n_m, m_]: m_res) res[n + "_" + n_m] = m_;
+        for(const auto& [n_m, m_]: m_res){
+            if(res.contains(n_m))
+                res[n + "_" + n_m] = m_;
+            else res[n_m]=m_;
+        }
     };
     return res;
 }
@@ -98,21 +109,25 @@ vector<tptr<float>> nn::Module::parameters(const bool &recurse)
 };
 std::unordered_map<std::string, cyg::tptr<float>> nn::Module::named_parameters(const bool &recurse)
 {
-    std::unordered_map<std::string, cyg::tptr<float>> res;
-    if(!recurse || _modules.size()==0) return _parameters;
+    std::unordered_map<std::string, cyg::tptr<float>> res = _parameters;
+    if(!recurse || _modules.size()==0) return res;
 
     for (const auto &[n, m] : _modules)
     {
         auto m_res = m->named_parameters(recurse);
-        for(const auto& [n_p, p]: m_res) res[n + "_" + n_p] = p;
+        for(const auto& [n_p, p]: m_res) {
+            if(res.contains(n_p))
+                res[n + "_" + n_p] = p;
+            else res[n_p]=p;
+        }
     };
     return res;
 };
 
 std::unordered_map<std::string, cyg::tptr<float>> nn::Module::named_buffers(const bool &recurse) const
 {
-    std::unordered_map<std::string, cyg::tptr<float>> res;
-    if(!recurse || _modules.size()==0) return _buffers;
+    std::unordered_map<std::string, cyg::tptr<float>> res = _buffers;
+    if(!recurse || _modules.size()==0) return res;
     
     for (const auto &[n, m] : _modules)
     {
@@ -169,9 +184,8 @@ ostream &operator<<(ostream &out, Module &module)
     return out;
 };
 
-nn::Linear::Linear(size_t in_features, size_t out_features, bool bias) : Module(), _bias(bias), _in_features(in_features), _out_features(out_features)
+nn::Linear::Linear(const size_t &in_features, const size_t &out_features, const bool &bias, const std::string &n) : Module(n), _bias(bias), _in_features(in_features), _out_features(out_features)
 {
-    this->name = "Linear";
     vector<size_t> weight_feat{out_features, in_features}, bias_feat{out_features};
     register_parameter("weight", make_shared<cyg::tensor<float>>(weight_feat, 1, true));
     if (_bias)
@@ -196,7 +210,7 @@ tptr<float> nn::Linear::forward(const tptr<float> &input_tensor)
     return output;
 };
 
-nn::Sequential::Sequential(std::vector<std::pair<std::string, Module *>> input) : Module()
+nn::Sequential::Sequential(std::vector<std::pair<std::string, Module *>> input, const std::string &n): Module(n)
 { // can also use std::vector of tuples
     for (const auto &[n, m] : input)
         register_module(n, m);
@@ -214,7 +228,8 @@ tptr<float> nn::Sequential::forward(const tptr<float> &input_tensor)
 
 cyg::tptr<float> nn::ReLU::forward(const cyg::tptr<float> &input_tensor)
 {
-    auto condition = input_tensor > 0.0f;
+    auto condition = input_tensor > 0.0;
+    std::cout<<condition->shape()<<"\n";
     // auto mask = zeros->where(input_tensor>0.0f, 1.0f); // max(0, x)  y = x if x>0 else 0;
     // auto output = functional::abs(input_tensor * mask); //using abs to handle -ve float, no side effect on backprop of input_tensor
     auto output = input_tensor->where(condition, 0.0f);
@@ -222,12 +237,11 @@ cyg::tptr<float> nn::ReLU::forward(const cyg::tptr<float> &input_tensor)
     return output;
 };
 
-nn::Dropout::Dropout(float p) : Module(), p(p)
+nn::Dropout::Dropout(const float &p, const std::string &n) : Module(n), p(p)
 {
     if (p > 1.0 || p < 0.0)
         throw runtime_error("invalid input, prob should be between 0 and 1 (inclusive)");
     training = true;
-    name = "DropoutOp";
 }
 cyg::tptr<float> nn::Dropout::forward(const cyg::tptr<float> &input_tensor)
 {
@@ -269,7 +283,7 @@ cyg::tptr<float> nn::Softmax::forward(const cyg::tptr<float> &x)
     return softmax(x, _dim);
 };
 
-nn::BatchNorm::BatchNorm(size_t num_features, float eps, float momentum, bool affine, bool track_running_stats) : Module(), _num_features(num_features), _eps(eps), _momentum(momentum), _affine(affine), _tracking_running_stats(track_running_stats)
+nn::BatchNorm::BatchNorm(const size_t &num_features, const float &eps, const float &momentum, const bool &affine, const bool &track_running_stats, const std::string &n) : Module(n), _num_features(num_features), _eps(eps), _momentum(momentum), _affine(affine), _tracking_running_stats(track_running_stats)
 {
     std::vector<size_t> dims = {1, num_features};
     register_parameter("gammas", make_shared<cyg::tensor<float>>(dims, 1, true));
@@ -283,7 +297,6 @@ nn::BatchNorm::BatchNorm(size_t num_features, float eps, float momentum, bool af
         register_buffer("running_var", make_shared<cyg::tensor<float>>(dims, 0, false));
     }
     training = true;
-    name = "BatchNormOp";
 };
 
 cyg::tptr<float> nn::BatchNorm::forward(const cyg::tptr<float> &x)
@@ -300,9 +313,9 @@ cyg::tptr<float> nn::BatchNorm::forward(const cyg::tptr<float> &x)
         auto var = x->var(-2, 0, true);
         scaled_x = (x - mean) / (var + _eps)->pow(0.5);
     }
-    auto scaled_output = scaled_x * get_buffer("gammas");
+    auto scaled_output = scaled_x * get_parameter("gammas");
     if (_affine)
-        scaled_output = scaled_output + get_buffer("betas");
+        scaled_output = scaled_output + get_parameter("betas");
 
     if (_tracking_running_stats && training)
     {
@@ -317,7 +330,7 @@ cyg::tptr<float> nn::BatchNorm::forward(const cyg::tptr<float> &x)
     return scaled_output;
 };
 
-nn::LayerNorm::LayerNorm(size_t normalized_shape, float eps, bool elementwise_affine, bool bias) : Module(), _normalized_shape(normalized_shape), _eps(eps), _elementwise_affine(elementwise_affine), _bias(bias)
+nn::LayerNorm::LayerNorm(const size_t &normalized_shape, const float &eps,const bool &elementwise_affine, const bool &bias, const std::string &n) : Module(n), _normalized_shape(normalized_shape), _eps(eps), _elementwise_affine(elementwise_affine), _bias(bias)
 {
     std::vector<size_t> dims = {1, normalized_shape};
     if (elementwise_affine)
@@ -327,7 +340,6 @@ nn::LayerNorm::LayerNorm(size_t normalized_shape, float eps, bool elementwise_af
             register_parameter("betas", make_shared<cyg::tensor<float>>(dims, 0, true));
     }
     training = true;
-    name = "LayerNormOp";
 };
 
 cyg::tptr<float> nn::LayerNorm::forward(const cyg::tptr<float> &x)

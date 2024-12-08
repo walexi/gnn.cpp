@@ -28,12 +28,15 @@ namespace nn
     class Module : public std::enable_shared_from_this<Module>
     {
     public:
-        Module() {};
+        Module(std::string n="Module"): name(n) {};
         bool training = true;
         std::string name;
-        void register_module(std::string name, Module *module) { _modules.push_back({name, std::shared_ptr<Module>(module)}); }
+        void register_module(std::string name, Module *module) { 
+            module->name=name;
+            _modules.push_back({name, std::shared_ptr<Module>(module)}); 
+        }
         void register_parameter(std::string name, cyg::tptr<float> p);
-        void register_buffer(std::string name, cyg::tptr<float> p) { _buffers[name] = p; };
+        void register_buffer(std::string name, cyg::tptr<float> p);
         void zero_grad();
         void eval() { train(false); };
         void train(const bool &isTrain = true);
@@ -48,8 +51,8 @@ namespace nn
         std::unordered_map<std::string, std::shared_ptr<Module>> named_modules(const bool &recurse = true);
         std::vector<cyg::tptr<float>> parameters(const bool &recurse = true);
         std::unordered_map<std::string, cyg::tptr<float>> named_parameters(const bool &recurse = true);
-        std::unordered_map<std::string, cyg::tptr<float>> named_buffers(const bool &recurse = true) const;
         std::vector<cyg::tptr<float>> buffers(const bool &recurse = true) const; // can be float, int, bool, trying to avoid templating Module, btw any other type can be easily cast to float
+        std::unordered_map<std::string, cyg::tptr<float>> named_buffers(const bool &recurse = true) const;
         ~Module();
     
     std::vector<std::pair<std::string, std::shared_ptr<Module>>> _modules;
@@ -61,7 +64,7 @@ namespace nn
     {
         // y = input_tensor(dd * in) * w(out * in).t() + c(out * 1)
         public:
-            Linear(size_t in_features, size_t out_features, bool bias = true);
+            Linear(const size_t &in_features, const size_t &out_features, const bool &bias = true, const std::string &n="Linear");
             void reset_parameters();
             cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
 
@@ -72,8 +75,8 @@ namespace nn
     class Sequential : public Module
     {
     public:
-        Sequential() : Module() {};
-        Sequential(std::vector<std::pair<std::string, Module*>> input);
+        Sequential(const std::string &n="seq") : Module(n) {};
+        Sequential(std::vector<std::pair<std::string, Module*>> input, const std::string &n="seq");
         void add_module(std::string n, Module* m){ register_module(n, m);}
         cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
     };
@@ -83,7 +86,7 @@ namespace nn
     class ReLU : public Module
     {
         public:
-            ReLU() : Module() { name = "ReLU"; }
+            ReLU(const std::string &n="ReLU") : Module(n) {}
             cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
     };
 
@@ -91,7 +94,7 @@ namespace nn
     class Dropout : public Module
     {
         public:
-            Dropout(float p = 0.2);
+            Dropout(const float &p = 0.2, const std::string &n="Dropout");
             cyg::tptr<float> forward(const cyg::tptr<float> &input_tensor) override;
         float p;
     };
@@ -101,7 +104,7 @@ namespace nn
     class Softmax : public Module
     {
         public:
-            Softmax(int d) : Module(), _dim(d) { name = "Softmax"; }
+            Softmax(int d, const std::string &n="Softmax") : Module(n), _dim(d) { }
             cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
         int _dim;
     };
@@ -111,7 +114,7 @@ namespace nn
     class BatchNorm : public Module
     {
         public:
-            BatchNorm(size_t num_features, float eps = 1e-05, float momentum = 0.1, bool affine = true, bool track_running_stats = true);
+            BatchNorm(const size_t &num_features, const float &eps = 1e-05, const float &momentum = 0.1, const bool &affine = true, const bool &track_running_stats = true, const std::string &n="BatchNorm");
             cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
 
         int _num_features;
@@ -122,7 +125,7 @@ namespace nn
     class LayerNorm : public Module
     {
         public:
-            LayerNorm(size_t normalized_shape, float eps = 1e-05, bool elementwise_affine = true, bool bias = true);
+            LayerNorm(const size_t &normalized_shape, const float &eps = 1e-05, const bool &elementwise_affine = true, const bool &bias = true, const std::string &n="LayerNorm");
             cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
 
         int _normalized_shape;
@@ -136,14 +139,14 @@ namespace nn
     class Sigmoid : public Module
     {
         public:
-            Sigmoid() : Module() { name = "Sigmoid"; }
+            Sigmoid(const std::string &n="Sigmoid") : Module(n) {}
             cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
     };
 
     class LogSoftmax : public Module
     {
         public:
-            LogSoftmax(int dim) : Module(), _dim(dim) { name = "LogSoftmax"; }
+            LogSoftmax(int dim, const std::string &n="LogSoftmax") : Module(n), _dim(dim) {}
             cyg::tptr<float> forward(const cyg::tptr<float> &x) override;
 
         int _dim;

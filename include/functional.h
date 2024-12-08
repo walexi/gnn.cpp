@@ -137,14 +137,12 @@ namespace functional
     template <class T>
     std::shared_ptr<cyg::tensor<T>> minimum(const cyg::tensor<T> &tensor1, const T value)
     {
-
         return minimum<T>(tensor1, cyg::tensor<T>(tensor1.shape(), static_cast<T>(value), false));
     }
 
     template <class T>
     std::shared_ptr<cyg::tensor<bool>> gt(const cyg::tensor<T> &t1, const cyg::tensor<T> &t2)
     {
-        auto req_grad = t1.requires_grad() || t2.requires_grad();
         std::valarray<T> t1data, t2data;
         std::vector<size_t> new_dims;
         t1data = *t1.data();
@@ -158,7 +156,7 @@ namespace functional
         auto new_data = new std::valarray<bool>(t1.numel());
         *new_data = t1data > t2data;
 
-        return std::make_shared<cyg::tensor<bool>>(new_dims, new_data, req_grad);
+        return std::make_shared<cyg::tensor<bool>>(new_dims, new_data, false);
     }
 
     template <class T>
