@@ -1,6 +1,6 @@
 # gnn.cpp
 
-implementing graph nn from scratch in C++
+implementing Graph Convolutional Networks (GCN) from scratch in C++
  
 \
 \
