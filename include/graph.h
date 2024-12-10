@@ -53,6 +53,7 @@ namespace graph
     class Data
     {
     public:
+        Data(){};
         /**
          * @param x(type tensor<float>) shape [num_node, num_node_features]
          * @param edge_index(type tensor<int>) shape[2, num_edges] coo format
@@ -87,16 +88,26 @@ namespace graph
          */
         void set_mask(cyg::tensor<bool> &mask, DataType type = DataType::TRAIN);
 
-    cyg::tensor<bool> *_train_mask = nullptr;
-    cyg::tensor<bool> *_val_mask = nullptr;
-    cyg::tensor<bool> *_test_mask = nullptr;
-    size_t _num_nodes, _num_node_features, _num_edges, _num_edge_features;
-    cyg::tensor<int> *_adj_matrix = nullptr;
-    cyg::tensor<int> *_edge_index = nullptr;
-    cyg::tensor<float> *_y = nullptr;
-    cyg::tptr<float> _x, _edge_attr;
+    protected:
+        cyg::tensor<bool> *_train_mask = nullptr;
+        cyg::tensor<bool> *_val_mask = nullptr;
+        cyg::tensor<bool> *_test_mask = nullptr;
+        size_t _num_nodes, _num_node_features, _num_edges, _num_edge_features;
+        cyg::tensor<int> *_adj_matrix = nullptr;
+        cyg::tensor<int> *_edge_index = nullptr;
+        cyg::tensor<float> *_y = nullptr;
+        cyg::tptr<float> _x, _edge_attr;
     };
-
+    //holds a batch of Data objects
+    // so Data.x => batch * num_nodes * num_nodes_features
+    // Data.edge_index => batch * 2 * num_edges
+    class DataBatch : public Data
+    {
+        public:
+            DataBatch(const size_t &bs, const std::vector<std::shared_ptr<Data>> data_list, const size_t padding_idx=0): Data(){
+                //padd to the largest with given padding_idx
+            };
+    };
     class MessagePassing : public nn::Module
     {
     public:
