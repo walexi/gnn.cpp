@@ -20,7 +20,7 @@ class Model: public MessagePassing
             //concat along feat => num_aa*2 * embed_size => 1
             register_module("post", new MLP(out_channels, {out_channels*2, out_channels, 1}, bias, p)); //postprocessing
         };
-        tptr<float> forward(const DataBatch &x) { //batch * 2 * num_aa => batch * 2 * num_aa * embed_size => batch * 2 o num_aa * embed_size
+        tptr<float> forward(const Data &x) { //batch * 2 * num_aa => batch * 2 * num_aa * embed_size => batch * 2 o num_aa * embed_size
                 return tptr<float>();
         };
 };
