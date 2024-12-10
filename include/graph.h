@@ -104,7 +104,7 @@ namespace graph
     class DataBatch : public Data
     {
         public:
-            DataBatch(const size_t &bs, const std::vector<std::shared_ptr<Data>> data_list, const size_t padding_idx=0): Data(){
+            DataBatch(const size_t &bs, const std::vector<std::shared_ptr<Data>> &data_list, const size_t &padding_idx=0): Data(){
                 //padd to the largest with given padding_idx
             };
     };
