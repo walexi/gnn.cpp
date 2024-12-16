@@ -105,19 +105,18 @@ namespace graph
     {
         public:
             DataBatch(const size_t &bs, const std::vector<std::shared_ptr<Data>> &data_list, const size_t &padding_idx=0): Data(){
-                //padd to the largest with given padding_idx
             };
     };
     class MessagePassing : public nn::Module
     {
     public:
         MessagePassing() {}
-        virtual cyg::tptr<float> message(const cyg::tptr<float> &x, const cyg::tptr<float>* others=nullptr){ return  x; };
-        virtual cyg::tptr<float> aggregate_and_update(const cyg::tptr<float> &x, const cyg::tensor<int> &edge_index) { throw std::runtime_error("not yet implemented"); };
+        virtual cyg::tptr<float> message(const cyg::tptr<float>* x_i, const cyg::tptr<float>* x_j, const cyg::tptr<float>* others=nullptr){ return  *x_j; };
+        virtual cyg::tptr<float> aggregate_and_update(const cyg::tptr<float> &x, const cyg::tensor<int> &edge_index, const cyg::tptr<float>* other) { throw std::runtime_error("not yet implemented"); };
         template<typename... T> cyg::tptr<float> operator()(T&...input) { return forward(std::forward<T>(input)...); };//std::forward
         virtual cyg::tptr<float> forward(Data &&input) { throw std::runtime_error("not yet implemented");}
         virtual cyg::tptr<float> forward(Data &&input, Data &input2) { throw std::runtime_error("not yet implemented");}
-        cyg::tptr<float> propagate(const cyg::tensor<int> &edge_index, const cyg::tptr<float> &x, const cyg::tptr<float> &others);
+        virtual cyg::tptr<float> propagate(const cyg::tensor<int> &edge_index, const cyg::tptr<float> &x, const cyg::tptr<float>* norm=nullptr);
     };
 
     // https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_gnn.html#the-messagepassing-base-class
@@ -130,8 +129,9 @@ namespace graph
              * edge_index shape [2, num_edges]
              */
             cyg::tptr<float> forward(Data && input) override;
-            cyg::tptr<float> message(const cyg::tptr<float> &x, const cyg::tptr<float>* norm) override { return *norm * (*get_module("drop"))(x); } //  num_nodes * 1  *   num_nodes * num_node_features
-            cyg::tptr<float> aggregate_and_update(const cyg::tptr<float> &x, const cyg::tensor<int> &edge_index) override;
+            cyg::tptr<float> propagate(const tensor<int> &edge_index, const tptr<float> &x, const tptr<float>* others) override;
+            //  num_nodes * 1  *   num_nodes * num_node_features
+            cyg::tptr<float> aggregate_and_update(const cyg::tptr<float> &x, const cyg::tensor<int> &edge_index, const cyg::tptr<float>* other) override;
 
         size_t _in_channels, _out_channels;
         float _dropout;
