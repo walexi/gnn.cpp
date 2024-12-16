@@ -194,7 +194,7 @@ tptr<float> graph::GCNConv::propagate(const tensor<int> &edge_index, const tptr<
 {
     //skip call to message, hack for normalizing message
     // deg = sqrt(deg(i)) * sqrt(deg(j)) for all j adjacent to i
-    // sum( 1/deg  * message) + bias => sum(1/deg) * sum(messages) + bias
+    // sum( 1/deg  * message) + bias ~= sum(1/deg) * sum(messages) + bias
     // sum(1/deg) has been computed in the forward method
     // sum(messages) is implemented in the aggregate_and_updated method
     auto out = aggregate_and_update(x, edge_index, norm);
