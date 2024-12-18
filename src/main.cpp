@@ -20,7 +20,6 @@ class Model: public MessagePassing
             //concat along feat => 2*num_aa * embed_size => 1
             register_module("post", new MLP(out_channels, {out_channels*2, out_channels, 1}, bias, p)); //postprocessing
         };
-        //batch of 2 proteins
         tptr<float> forward(const Data &x) { //batch * 2 * num_aa => batch * 2 * num_aa * embed_size => batch * 2 o num_aa * embed_size
                 return tptr<float>();
         };
@@ -28,24 +27,6 @@ class Model: public MessagePassing
 
 int main(void)
 {
-    /**
-     * i will be training a simple model for binding affinity prediction - i love this :=)
-     * each protein is a graph, and it comprises a number of amino acids
-     * each amino acid consists of 4 backbone atoms and a set of sidechain atoms (i will be ignoring the sidechains and backbone for this task) existing in some 3D space
-     * so for a graph representing a protein
-     * n_i for every nodes in the grap representing each amino acid
-     * each n_i has an embedding h_v
-     * 
-     * so x = num_nodes * embedding_size
-     * 
-     * this approach is oversimplified
-     * 
-     * using synthetic data to test my workflow
-     * use the SKEMPI/PDBBind dataset 
-     * 
-     * batch * 2 * num_aa * 1               batch * 2 * 2 * num_edges?
-     * batch * 2 * num_aa * embed_size      batch * 2 * 2 * num_edges?
-     *  
-     */
+    
     return 0;
 };
