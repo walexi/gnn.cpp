@@ -13,8 +13,8 @@
 #include <sstream>
 #include <type_traits>
 
-// TODO fix slice backprop for slice
 // TODO add logging
+// TODO add concurrency support for cpu ops + finish up thrift implm
 namespace cyg
 {
 
@@ -695,7 +695,7 @@ namespace cyg
         void uniform(const float &low, const float &high)
         { // inplace
             std::generate(std::begin((*this->_data)), std::end((*this->_data)), [low, high]()
-                          { return generate_random(low, high); });
+                          { return generate_random<T>(low, high); });
         }
         /**
          * @brief initialize tensor's values from a uniform distribution
@@ -849,7 +849,7 @@ namespace cyg
         out << " )" << "\n";
         return out;
     };
-
+    
     /**
      * @brief create a tensor with randomly generated data from a uniform distribution
      * @ todo add a param for a generator (different distributions)
@@ -861,12 +861,18 @@ namespace cyg
      *
      * @return generated tensor(type std::shared_ptr<tensor>)
      */
-    tptr<float> randn(std::vector<size_t> dims, int low = -1, int high = 1, bool requires_grad = false);
+    template<class T>
+    tptr<T> randn(std::vector<size_t> dims, T low = -1, T high = 1, bool requires_grad = false){        assertm(low < high, "low must be lower than high, pls check your input params");
+        if (low >= high)
+            throw std::runtime_error("pls check input params, low must be lower than high");
+        auto vec = initialize<T>(dims, 1);
+        std::generate(std::begin(*vec), std::end(*vec), [&]()
+                { return generate_random<T>(low, high); });
+        return std::make_shared<tensor<T>>(dims, vec, requires_grad);
+    }
 
     /**
      * @brief create a tensor with 1s and same shape as input tensor
-     *
-     *
      * @param input_tensor(type std::shared_ptr<tensor>)
      * @param requires_grad(type bool)
      * @return generated tensor(type std::shared_ptr<tensor>)
