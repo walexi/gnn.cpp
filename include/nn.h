@@ -213,15 +213,5 @@ namespace nn
             };
     };
 
-    class Embedding: public Module
-    {
-        public: 
-            Embedding(const size_t &num_embeddings, const size_t &embedding_dim, const size_t &padding_idx = 0, const bool &_freeze=false);
-            cyg::tptr<float> forward(const cyg::tptr<int> &idx);
-            // cyg::tptr<float> weight() const {return _weight;};
-        // cyg::tptr<float> _embd;
-        size_t _num_embeddings, _embedding_dim, _padding_idx;
-        bool _freeze;
-    };
 }
 #endif
